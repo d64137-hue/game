@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>【GAME PORTAL】カスタムゲームコレクション</title>
+    <style>
+        /* ベーススタイル */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212; /* ダークな背景 */
+            color: #E0E0E0;
+            text-align: center;
+            padding: 40px 20px;
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* タイトルをかっこよく */
+        h1 {
+            font-size: 3.5em;
+            color: #00FFFF; /* ネオンシアン */
+            text-shadow: 0 0 10px #00FFFF, 0 0 20px #00FFFF, 0 0 40px #007777;
+            margin-bottom: 50px;
+            letter-spacing: 5px;
+            animation: flicker 1.5s infinite alternate;
+        }
+
+        @keyframes flicker {
+            0% { opacity: 1; }
+            50% { opacity: 0.95; text-shadow: 0 0 8px #00FFFF, 0 0 18px #007777; }
+            100% { opacity: 1; }
+        }
+
+        /* ゲームリストのコンテナ */
+        #game-list {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 30px;
+            max-width: 1000px;
+            width: 100%;
+        }
+
+        /* ゲームリンク（カード）のスタイル */
+        .game-card {
+            background-color: #1E1E1E;
+            border: 2px solid #333;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            width: 200px;
+            padding: 20px;
+            transition: transform 0.3s, box-shadow 0.3s;
+            text-decoration: none; /* リンクの下線を消す */
+            color: inherit;
+        }
+
+        .game-card:hover {
+            transform: translateY(-5px) scale(1.05); /* 浮き上がるアニメーション */
+            box-shadow: 0 8px 25px rgba(0, 255, 255, 0.5); /* ネオンシャドウ */
+            border-color: #00FFFF;
+        }
+
+        .game-card h2 {
+            font-size: 1.5em;
+            color: #FF00FF; /* ネオンマゼンタ */
+            margin-top: 0;
+            margin-bottom: 10px;
+            text-shadow: 0 0 5px #FF00FF;
+        }
+
+        .game-card p {
+            font-size: 0.9em;
+            color: #AAAAAA;
+        }
+
+        .game-card .emoji {
+            font-size: 3em;
+            display: block;
+            margin-bottom: 15px;
+        }
+
+        /* フッター（あれば） */
+        footer {
+            margin-top: 50px;
+            font-size: 0.8em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>
+        GAME ARCADE &lt;PORTAL&gt;
+    </h1>
+
+    <div id="game-list">
+        
+        <a href="Invader_Game.html" class="game-card">
+            <span class="emoji">👾</span>
+            <h2>インベーダーゲーム</h2>
+            <p>HMG連射対応！懐かしのシューティング。</p>
+        </a>
+
+        <a href="Wire_Game.html" class="game-card">
+            <span class="emoji">⚡</span>
+            <h2>イライラ棒ゲーム</h2>
+            <p>集中力と精密操作が試される究極の迷路。</p>
+        </a>
+
+        <a href="Shmup_Game.html" class="game-card">
+            <span class="emoji">🚀</span>
+            <h2>弾幕シューティング</h2>
+            <p>自機を操作して弾を撃ちまくれ！</p>
+        </a>
+
+        <a href="Dodging_Game.html" class="game-card">
+            <span class="emoji">👻</span>
+            <h2>純粋な弾幕回避</h2>
+            <p>当たらなければどうということはない！</p>
+        </a>
+
+    </div>
+
+    <footer>
+        <p>&copy; Custom Game Collection Project</p>
+    </footer>
+
+</body>
+</html>
