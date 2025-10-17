@@ -148,7 +148,6 @@
         let isDragging = false; 
         
         // --- 永続アップグレード (クリスタル通貨) ---
-        // GOLD獲得倍率の初期値を1に戻し、計算上のバグを防ぐ
         const defaultPermStats = {
             goldMultiplier: 1,      
             baseMaxHp: 150,         
@@ -211,6 +210,7 @@
                 this.color = 'cyan';
                 this.hitRadius = 3; 
                 this.currentHp = stats.currentHp;
+                this.iFrames = 0; // 無敵時間カウンター (フレーム)
             }
 
             update() {
@@ -227,12 +227,16 @@
 
                 this.x = Math.max(0, Math.min(this.x, WIDTH - this.width));
                 this.y = Math.max(0, Math.min(this.y, HEIGHT - this.height));
+
+                if (this.iFrames > 0) this.iFrames--; // 無敵時間カウントダウン
             }
             
             takeDamage(damage) {
-                if (skillEffects.barrier > 0) return; 
+                if (skillEffects.barrier > 0 || this.iFrames > 0) return; // 無敵時間中はダメージ無効
 
                 this.currentHp -= damage;
+                this.iFrames = 20; // 🔥20フレーム (約0.33秒) の無敵時間を付与
+
                 // バグ修正: HPが0以下になったら直ちにゲームオーバー判定を行う
                 if (this.currentHp <= 0) {
                     this.currentHp = 0; // HPを0に固定
@@ -271,12 +275,22 @@
                 const center = this.getCenter();
                 const isInvincible = skillEffects.barrier > 0;
 
+                // 描画設定をリセット
+                ctx.globalAlpha = 1.0; 
+
                 // 1. バリアエフェクト
                 if (isInvincible) {
                     ctx.fillStyle = `rgba(30, 144, 255, ${gameFrame % 10 < 5 ? 0.7 : 0.4})`;
                     ctx.beginPath();
                     ctx.arc(center.x, center.y, 25, 0, Math.PI * 2);
                     ctx.fill();
+                }
+
+                // 無敵時間中の点滅処理
+                if (this.iFrames > 0) {
+                    if (gameFrame % 5 < 2) { // わずかな点滅で無敵を表示
+                        ctx.globalAlpha = 0.3; 
+                    }
                 }
 
                 // 2. プレイヤー本体（三角形）
@@ -300,6 +314,8 @@
                 ctx.arc(center.x, center.y, this.hitRadius + 1, 0, Math.PI * 2);
                 ctx.fill();
                 
+                ctx.globalAlpha = 1.0; // 描画後に元に戻す
+                
                 this.drawHealthBar();
             }
 
@@ -308,7 +324,7 @@
             }
         }
 
-        // 自機弾
+        // 自機弾 (クラス定義は省略 - 変更なし)
         class PlayerBullet {
             constructor(x, y) {
                 this.x = x;
@@ -333,7 +349,7 @@
             }
         }
         
-        // 敵
+        // 敵 (クラス定義は省略 - 変更なし)
         class Enemy {
             constructor(initialHP) {
                 this.width = 40;
@@ -369,7 +385,7 @@
 
             shoot() {
                 let center = this.getCenter();
-                // 🔥バランス調整: 敵弾の基本速度の上昇幅をさらに緩和 (1/10 -> 1/15)
+                // バランス調整: 敵弾の基本速度の上昇幅をさらに緩和 (1/10 -> 1/15)
                 let speed = 2.5 + (currentWave / 15); 
                 
                 // 難易度による速度制限 (最大速度を調整)
@@ -542,7 +558,7 @@
             }
         }
 
-        // 敵弾
+        // 敵弾 (クラス定義は省略 - 変更なし)
         class EnemyBullet {
             constructor(x, y, dy, color = 'red', dx = 0, radius = 5, followDuration = 0, isSquare = false, bounce = 0) {
                 this.x = x;
@@ -615,7 +631,7 @@
             }
         }
         
-        // アイテム (GOLD)
+        // アイテム (GOLD) (クラス定義は省略 - 変更なし)
         class Item {
             constructor(x, y, value) {
                 this.x = x;
@@ -703,7 +719,7 @@
         }
 
         function checkCollisions() {
-            // 1. 自機弾 vs 敵
+            // 1. 自機弾 vs 敵 (省略 - 変更なし)
             playerBullets = playerBullets.filter(bullet => {
                 const dist = Math.sqrt(Math.pow(bullet.x - enemy.getCenter().x, 2) + Math.pow(bullet.y - enemy.getCenter().y, 2));
                 if (dist < bullet.radius + enemy.width / 2) {
@@ -728,6 +744,12 @@
                 const dist = Math.sqrt(Math.pow(bullet.x - playerCenter.x, 2) + Math.pow(bullet.y - playerCenter.y, 2));
                 
                 if (dist < bullet.radius + playerCenter.radius) {
+                    
+                    // 🔥【バグ修正】バリア/無敵時間中はダメージ処理をスキップ
+                    if (skillEffects.barrier > 0 || player.iFrames > 0) {
+                        return false; // 弾だけ消してダメージは受けない
+                    }
+                    
                     player.takeDamage(10); 
                     updateDisplay();
                     // ゲームオーバーした場合は、この後の処理をスキップ
@@ -737,7 +759,7 @@
                 return !bullet.update(); 
             });
             
-            // 3. プレイヤー vs アイテム
+            // 3. プレイヤー vs アイテム (省略 - 変更なし)
             items = items.filter(item => {
                 const playerCenter = player.getCenter();
                 const dist = Math.sqrt(Math.pow(item.x - playerCenter.x, 2) + Math.pow(item.y - playerCenter.y, 2));
@@ -772,7 +794,7 @@
         
         function activateSkill(skillId) {
             const skill = skillData[skillId];
-            // バグ修正: HPが0の時はスキル発動不可
+            // HPが0の時はスキル発動不可
             if (skill.currentCd > 0 || stats.currentHp <= 0) return;
             
             skill.currentCd = skill.cd * (1 - skill.level * 0.05);
@@ -986,7 +1008,7 @@
                 const isDisabled = stats.crystal < currentCost || currentLevel >= item.max;
                 const buttonText = currentLevel >= item.max ? "MAX" : `強化 ${currentCost}C`;
                 
-                // バグ修正: GOLD_MULTIの表示を丸める
+                // GOLD_MULTIの表示を丸める
                 const displayCurrentVal = item.stat === 'goldMultiplier' ? `${(currentVal * 100).toFixed(0)}%` : currentVal;
                 const nextVal = item.stat === 'goldMultiplier' ? `${((currentVal + item.step) * 100).toFixed(0)}%` : `+${item.step}`;
                 const detailText = `現在の値: ${displayCurrentVal} → Next: ${nextVal}`;
@@ -999,7 +1021,7 @@
             });
             html += `</div>`;
 
-            // 🔥要望追加: 永続アップグレードのリセットボタン
+            // 永続アップグレードのリセットボタン
             html += `<button id="reset-button" onclick="resetPermanentUpgrades()">
                         全永久アップグレードとCRYSTAL残高をリセット
                     </button>`;
@@ -1047,7 +1069,7 @@
             gameStatus = 'init';
         }
         
-        // 🔥追加機能: 永続アップグレードのリセット
+        // 永続アップグレードのリセット
         function resetPermanentUpgrades() {
             if (confirm("本当に全ての永久アップグレードとCRYSTAL残高をリセットしますか？この操作は元に戻せません。")) {
                 // localStorageのデータを初期値で上書き（削除と同義）
@@ -1075,7 +1097,9 @@
             updateSkills(); 
 
             player.update();
-            enemy.update();
+            // ボスが倒れた直後(startNextWaveが呼ばれた直後)はenemy.update()を呼ばない
+            if (gameStatus === 'playing') enemy.update();
+            
             checkCollisions();
 
             // 描画
