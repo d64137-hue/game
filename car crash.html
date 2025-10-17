@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Advanced Simple Road Racer</title>
+    <style>
+        /* キャンバスを中央に配置するためのシンプルなスタイル */
+        body { margin: 0; background-color: #222; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        canvas { border: 2px solid #555; background-color: #333; }
+        #scoreDisplay { color: white; position: absolute; top: 10px; right: 10px; font-size: 20px; font-family: monospace; }
+        #gameOverScreen {
+            position: absolute;
+            width: 300px;
+            height: 500px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            display: none; /* 初期は非表示 */
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-family: monospace;
+            text-align: center;
+        }
+        #gameOverScreen button {
+            padding: 10px 20px;
+            margin-top: 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="300" height="500"></canvas>
+    <div id="scoreDisplay">Score: 0</div>
+    <div id="gameOverScreen">
+        <h1>GAME OVER</h1>
+        <p id="finalScore"></p>
+        <button onclick="resetGame()">RESTART</button>
+    </div>
+
+    <script>
+       const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const finalScoreDisplay = document.getElementById('finalScore');
+        
+        // --- ゲーム定数 ---
+        const ROAD_COLOR = '#444';
+        const ROAD_EDGE_COLOR = '#8B4513';
+        const LINE_COLOR = 'white';
+        const PLAYER_COLOR = 'blue';
+        const ENEMY_COLOR = 'red';
+        const PLAYER_MOVE_SPEED = 8;
+        const ROAD_WIDTH = 250;
+        const PASS_SCORE = 20;
+        
+        // --- 速度制御の定数と変数 ---
+        let BASE_SCROLL_SPEED = 5;      // 👈 基本のスクロール速度
+        let ENEMY_SPEED_MULTIPLIER = 1; // 👈 敵の速度にかかる倍率 (最初は1)
+        const SPEED_INCREASE_THRESHOLD = 400; // 👈 スコアが400増えるたびに速度アップ
+        const SPEED_INCREASE_RATE = 1.2;      // 👈 速度の増加倍率
+        let lastSpeedIncreaseScore = 0;   // 最後に速度が上がった時のスコア
+        
+        // --- ゲーム状態 ---
+        let scrollOffset = 0;
+        let isMovingLeft = false;
+        let isMovingRight = false;
+        let score = 0;
+        let isGameOver = false;
+        let enemies = [];
+        let enemySpawnTimer = 0;
+        const ENEMY_SPAWN_RATE = 100;
+
+        // --- 自機 (プレイヤー) の設定 ---
+        const PLAYER_WIDTH = 30;
+        const PLAYER_HEIGHT = 50;
+        let playerX = (canvas.width / 2) - (PLAYER_WIDTH / 2); 
+        const playerY = canvas.height - PLAYER_HEIGHT - 20; 
+        
+        // --------------------------------------------------------------------------
+        // 関数定義
+        // --------------------------------------------------------------------------
+
+        // 道路、路肩、車線を描画
+        function drawRoad() {
+            const currentScrollSpeed = BASE_SCROLL_SPEED * ENEMY_SPEED_MULTIPLIER; // 現在のスクロール速度
+            
+            // 1. 路肩 (画面全体)
+            ctx.fillStyle = ROAD_EDGE_COLOR;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 2. 道路 (走行エリア)
+            const roadStartX = (canvas.width - ROAD_WIDTH) / 2;
+            ctx.fillStyle = ROAD_COLOR;
+            ctx.fillRect(roadStartX, 0, ROAD_WIDTH, canvas.height);
+
+            // 3. 中央の点線の描画
+            ctx.fillStyle = LINE_COLOR;
+            const lineWidth = 6;
+            const lineGap = 20;
+            const lineLength = 30;
+            const roadCenterX = canvas.width / 2;
+
+            for (let i = -1; i < canvas.height / (lineLength + lineGap) + 1; i++) {
+                let y = (i * (lineLength + lineGap) + scrollOffset) % (canvas.height + lineLength + lineGap);
+                if (y < 0) y += (canvas.height + lineLength + lineGap);
+
+                ctx.fillRect(roadCenterX - lineWidth / 2, y, lineWidth, lineLength);
+            }
+
+            // スクロールオフセットを更新し、ループさせる
+            scrollOffset += currentScrollSpeed; // 👈 速度を適用
+            if (scrollOffset >= lineLength + lineGap) {
+                scrollOffset -= (lineLength + lineGap); 
+            }
+        }
+
+        function drawPlayer() {
+            ctx.fillStyle = PLAYER_COLOR;
+            ctx.fillRect(playerX, playerY, PLAYER_WIDTH, PLAYER_HEIGHT);
+        }
+
+        function drawEnemies() {
+            ctx.fillStyle = ENEMY_COLOR;
+            enemies.forEach(enemy => {
+                ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+            });
+        }
+        
+        function updatePlayer() {
+            if (isMovingLeft) {
+                playerX -= PLAYER_MOVE_SPEED;
+            }
+            if (isMovingRight) {
+                playerX += PLAYER_MOVE_SPEED;
+            }
+
+            const roadStartX = (canvas.width - ROAD_WIDTH) / 2;
+            const roadEndX = roadStartX + ROAD_WIDTH;
+
+            if (playerX < roadStartX) {
+                playerX = roadStartX;
+                gameOver();
+            }
+            if (playerX > roadEndX - PLAYER_WIDTH) {
+                playerX = roadEndX - PLAYER_WIDTH;
+                gameOver();
+            }
+        }
+
+        // 敵の出現と移動を更新
+        function updateEnemies() {
+            enemySpawnTimer++;
+            if (enemySpawnTimer > ENEMY_SPAWN_RATE / ENEMY_SPEED_MULTIPLIER) { // 👈 速度に応じて出現頻度も上げる（難易度調整）
+                spawnEnemy();
+                enemySpawnTimer = 0;
+            }
+
+            enemies.forEach(enemy => {
+                // 敵車両は、(基本スクロール速度 * 倍率) + (敵の固有速度 * 倍率) で移動
+                const movementSpeed = BASE_SCROLL_SPEED * ENEMY_SPEED_MULTIPLIER + enemy.speed * ENEMY_SPEED_MULTIPLIER; 
+                enemy.y += movementSpeed; 
+                
+                if (enemy.y > canvas.height && !enemy.passed) {
+                    score += PASS_SCORE;
+                    enemy.passed = true;
+                    scoreDisplay.textContent = `Score: ${score}`;
+                }
+            });
+
+            enemies = enemies.filter(enemy => enemy.y < canvas.height);
+        }
+
+        function spawnEnemy() {
+            const ENEMY_WIDTH = 30;
+            const ENEMY_HEIGHT = 40;
+            const roadStartX = (canvas.width - ROAD_WIDTH) / 2;
+            
+            const randomX = roadStartX + Math.random() * (ROAD_WIDTH - ENEMY_WIDTH);
+
+            enemies.push({
+                x: randomX,
+                y: -ENEMY_HEIGHT,
+                width: ENEMY_WIDTH,
+                height: ENEMY_HEIGHT,
+                speed: Math.random() * 2, // 敵ごとの固有の追加速度 (速度倍率をかける前に決まる)
+                passed: false
+            });
+        }
+
+        function checkCollisions() {
+            const player = { x: playerX, y: playerY, w: PLAYER_WIDTH, h: PLAYER_HEIGHT };
+            
+            enemies.forEach(enemy => {
+                if (player.x < enemy.x + enemy.width &&
+                    player.x + player.w > enemy.x &&
+                    player.y < enemy.y + enemy.height &&
+                    player.y + player.h > enemy.y) {
+                    
+                    gameOver();
+                }
+            });
+        }
+        
+        // 👈 難易度を上げるロジックを管理する新しい関数
+        function manageDifficulty() {
+            // スコアがしきい値を超えていて、かつ最後に速度アップしたスコアとの差が400以上か
+            if (score >= lastSpeedIncreaseScore + SPEED_INCREASE_THRESHOLD) {
+                
+                ENEMY_SPEED_MULTIPLIER *= SPEED_INCREASE_RATE; // 速度倍率を1.2倍にする
+                lastSpeedIncreaseScore = Math.floor(score / SPEED_INCREASE_THRESHOLD) * SPEED_INCREASE_THRESHOLD;
+                
+                // (オプション) 速度が上がったことを確認するためにコンソールに出力
+                console.log(`速度アップ! スコア: ${score}, 新しい倍率: ${ENEMY_SPEED_MULTIPLIER.toFixed(2)}`);
+            }
+        }
+
+        function gameOver() {
+            if (isGameOver) return;
+            isGameOver = true;
+            cancelAnimationFrame(gameLoopHandle);
+            
+            finalScoreDisplay.textContent = `最終スコア: ${score}`;
+            gameOverScreen.style.display = 'flex';
+        }
+
+        function resetGame() {
+            isGameOver = false;
+            score = 0;
+            playerX = (canvas.width / 2) - (PLAYER_WIDTH / 2);
+            enemies = [];
+            enemySpawnTimer = 0;
+            
+            // 速度パラメータを初期値に戻す 👈 リセット時に重要
+            ENEMY_SPEED_MULTIPLIER = 1;
+            lastSpeedIncreaseScore = 0;
+            
+            gameOverScreen.style.display = 'none';
+            scoreDisplay.textContent = `Score: 0`;
+            gameLoop();
+        }
+
+        // --------------------------------------------------------------------------
+        // ゲームループと入力処理
+        // --------------------------------------------------------------------------
+        let gameLoopHandle;
+
+        function gameLoop() {
+            if (isGameOver) return;
+
+            // 1. 更新 (update)
+            updatePlayer();
+            updateEnemies();
+            checkCollisions();
+            manageDifficulty(); // 👈 難易度管理をゲームループに追加
+
+            // 2. 描画 (draw)
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawRoad();
+            drawEnemies();
+            drawPlayer();
+
+            gameLoopHandle = requestAnimationFrame(gameLoop);
+        }
+
+        // キーボード入力のイベントリスナー
+        document.addEventListener('keydown', (e) => {
+            if (isGameOver) return;
+            if (e.key === 'ArrowLeft' || e.key === 'a') {
+                isMovingLeft = true;
+            } else if (e.key === 'ArrowRight' || e.key === 'd') {
+                isMovingRight = true;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a') {
+                isMovingLeft = false;
+            } else if (e.key === 'ArrowRight' || e.key === 'd') {
+                isMovingRight = false;
+            }
+        });
+
+        // ゲームスタート！
+        gameLoop();
+    </script>
+</body>
+</html>
