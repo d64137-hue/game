@@ -2,11 +2,12 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>HTMLインベーダーゲーム（HMG連射速度調整版）</title>
+    <title>HTMLインベーダーゲーム</title>
     <style>
         /* CSS: スタイル設定 */
         body {
             display: flex;
+            flex-direction: column; /* 垂直方向に要素を配置 */
             justify-content: center;
             align-items: center;
             height: 100vh;
@@ -17,16 +18,31 @@
             border: 2px solid #fff; /* キャンバスに白い枠線 */
             background-color: #000;
         }
+        .back-button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #444;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            border-radius: 5px;
+            display: none; /* 初期は非表示 */
+        }
     </style>
 </head>
 <body>
 
     <canvas id="gameCanvas" width="600" height="400"></canvas>
+    <button id="backToHome" class="back-button" onclick="location.href='Game_Portal.html'">
+        ホームへ戻る
+    </button>
 
     <script>
         // 1. キャンバスとコンテキストの初期設定
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+        const backButton = document.getElementById('backToHome'); // 追加
 
         // 2. グローバル変数とオブジェクトの定義
         const player = {
@@ -53,9 +69,9 @@
         const enemyBulletBaseHeight = 8;
         
         // パワーアップ関連の変数
-        let baseBulletDamage = 1;       
+        let baseBulletDamage = 1;     
         let permanentDamageBonus = 0;   
-        let temporaryDamageMultiplier = 1; 
+        let temporaryDamageMultiplier = 1;
         let heavyMachineGunEndTime = 0; 
         let notification = {
             message: '',
@@ -67,16 +83,13 @@
         let lastPlayerShotTime = 0;
         
         const playerShotCooldown = 400; // 通常時の連射クールダウン (0.4秒)
-        
-        // --- 🔴 HMGの連射クールダウンを100msに設定 ---
         const hmgShotCooldown = 100;    // HMG発動時の連射クールダウン (0.1秒)
-        // ---------------------------------------------
         
         // スコア連動HP増加用変数
         let currentScoreHPBonus = 0;        
         let next1000ScoreThreshold = 1000;  
         let next5000ScoreThreshold = 5000;  
-        let next10000ScoreThreshold = 10000; 
+        let next10000ScoreThreshold = 10000;
 
         // キーボードの状態を管理
         const keys = {};
@@ -301,11 +314,11 @@
                     if (enemy.isAlive && checkCollision(bullet, enemy)) {
                         const originalScore = score; 
                         enemy.hp -= bullet.damage;
-                        bullets.splice(i, 1); 
+                        bullets.splice(i, 1);   
                         
                         if (enemy.hp <= 0) {
                             enemy.isAlive = false;
-                            score += 10 * stage; 
+                            score += 10 * stage;    
                             
                             if (score > originalScore) {
                                 checkScoreHPIncrease();
@@ -315,23 +328,23 @@
                             const rand = Math.random();
                             
                             // (1) ヘビーマシンガン (3%の確率)
-                            if (rand < 0.03) { 
+                            if (rand < 0.03) {  
                                 heavyMachineGunEndTime = Date.now() + 15000; 
                                 notification.message = 'HEAVY MACHINEGUN';
                                 notification.color = 'gray';
                                 notification.outline = 'red';
                                 notification.startTime = Date.now();
-                            } 
+                            }   
                             // (2) 永続ダメージアップ (2%の確率)
-                            else if (rand >= 0.03 && rand < 0.05) { 
+                            else if (rand >= 0.03 && rand < 0.05) {  
                                 permanentDamageBonus += 2;
                                 notification.message = 'MORE POWER';
                                 notification.color = 'orange';
-                                notification.outline = 'none'; 
+                                notification.outline = 'none';  
                                 notification.startTime = Date.now();
                             }
                         }
-                        break; 
+                        break;  
                     }
                 }
             }
@@ -342,12 +355,13 @@
                     const eBullet = enemyBullets[i];
 
                     if (checkCollision(eBullet, player)) {
-                        enemyBullets.splice(i, 1); 
+                        enemyBullets.splice(i, 1);  
                         lives -= 1; 
                         
                         if (lives <= 0) {
                             player.isAlive = false;
                             gameStatus = 'gameover';
+                            backButton.style.display = 'block'; // ホームボタン表示
                         } else {
                             enemyBullets.length = 0;
                             player.x = canvas.width / 2 - 20;
@@ -360,9 +374,13 @@
             // ステージクリア判定 (変更なし)
             if (enemies.filter(e => e.isAlive).length === 0) {
                 stage += 1;
-                enemySpeed += 0.1; 
+                enemySpeed += 0.1;  
                 initializeEnemies();
-                enemyBullets.length = 0; 
+                enemyBullets.length = 0;    
+            }
+            
+            if (gameStatus === 'gameover') {
+                 backButton.style.display = 'block'; // ゲームオーバー時にも表示
             }
         }
 
@@ -445,7 +463,7 @@
             }
         }
         
-        // ゲームオーバー画面の描画 (変更なし)
+        // ゲームオーバー画面の描画 (変更)
         function drawGameOver() {
             ctx.fillStyle = 'white';
             ctx.font = '48px Arial';
@@ -453,13 +471,21 @@
             ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2);
             ctx.font = '24px Arial';
             ctx.fillText('Final Score: ' + score, canvas.width / 2, canvas.height / 2 + 50);
-            ctx.fillText('Press F5 to Restart', canvas.width / 2, canvas.height / 2 + 90);
+            // ctx.fillText('Press F5 to Restart', canvas.width / 2, canvas.height / 2 + 90); // F5メッセージを削除
+            
+            // ホームボタンを表示
+            backButton.style.display = 'block';
         }
 
         function draw() {
             // 背景をクリア
             ctx.fillStyle = '#000';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // ホームボタンを非表示にリセット
+            if (gameStatus === 'playing') {
+                backButton.style.display = 'none';
+            }
 
             if (gameStatus === 'playing') {
                 // プレイヤーの描画
@@ -492,7 +518,7 @@
         // ----------------------------------------------
         function gameLoop() {
             if (gameStatus === 'playing') {
-                updatePowerUps(); 
+                updatePowerUps();   
 
                 updatePlayer();
                 updateBullets();
