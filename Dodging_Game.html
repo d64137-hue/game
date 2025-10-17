@@ -28,7 +28,6 @@
             background: #1e1e1e;
         }
         #NewGameCanvas {
-            /* 画面サイズは500x650のまま */
             background: #00001a;
             border: 2px solid #ff9800;
             display: block;
@@ -36,8 +35,60 @@
             cursor: pointer; 
             touch-action: none; 
         }
-        /* 削除された .back-button のスタイルは不要 */
-        .home-button {
+        
+        /* 難易度選択画面 (スタート画面) のスタイル */
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+        #difficulty-selector {
+            background: #333;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(255, 152, 0, 0.5);
+        }
+        #difficulty-selector h2 {
+            color: #ff9800;
+            margin-top: 0;
+            margin-bottom: 25px;
+            font-size: 2em;
+        }
+        .difficulty-button {
+            display: block;
+            width: 200px;
+            padding: 15px 10px;
+            margin: 10px auto;
+            border: 2px solid #555;
+            border-radius: 8px;
+            background-color: #444;
+            color: white;
+            font-size: 1.2em;
+            cursor: pointer;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        .difficulty-button:hover {
+            background-color: #555;
+            border-color: #ff9800;
+        }
+        .difficulty-button.selected {
+            background-color: #ff9800;
+            color: black;
+            border-color: white;
+            font-weight: bold;
+            box-shadow: 0 0 15px #ff9800;
+        }
+
+        /* 共通ボタン */
+        .game-button {
             margin-top: 20px;
             padding: 10px 20px;
             background-color: #FF9800; /* オレンジ */
@@ -46,38 +97,117 @@
             cursor: pointer;
             font-size: 16px;
             border-radius: 5px;
-            display: none; /* 初期は非表示 */
+            transition: background-color 0.2s;
+        }
+        .game-button:hover {
+            background-color: #ffb74d;
         }
     </style>
 </head>
 <body>
     <div id="NewGameArea">
-        <h1>純粋な弾幕回避ゲーム (精密回避)</h1>
+        <h1>純粋な弾幕回避ゲーム (<span id="difficulty-title">難易度: 選択してください</span>)</h1>
+        
         <canvas id="NewGameCanvas" width="500" height="650"></canvas>
-        <div id="control-info">
+        
+        <div id="control-info" style="margin-top: 10px;">
             キー: **WASD** or **矢印**で移動 / **Shift**で精密移動 / **マウス/タッチ**でドラッグ移動
         </div>
-        <button id="homeButton" class="home-button" onclick="location.href='Game_Portal.html'">
+        
+        <button id="homeButton" class="game-button" onclick="location.href='Game_Portal.html'">
             ホームへ戻る
         </button>
+
+        <div id="start-screen">
+            <div id="difficulty-selector">
+                <h2>難易度を選択してください</h2>
+                <button class="difficulty-button selected" data-level="Easy" onclick="selectDifficulty('Easy')">Easy</button>
+                <button class="difficulty-button" data-level="Normal" onclick="selectDifficulty('Normal')">Normal</button>
+                <button class="difficulty-button" data-level="Hard" onclick="selectDifficulty('Hard')">Hard</button>
+                <button class="difficulty-button" data-level="Hell" onclick="selectDifficulty('Hell')">Hell</button>
+                <button class="game-button" id="startButton" onclick="startGame()">ゲーム開始</button>
+            </div>
+        </div>
+
     </div>
     
     <script>
         // --- 変数定義 ---
         const canvas = document.getElementById('NewGameCanvas');
         const ctx = canvas.getContext('2d');
-        const homeButton = document.getElementById('homeButton'); // 追加
+        const startScreen = document.getElementById('start-screen');
+        const difficultyTitle = document.getElementById('difficulty-title');
 
         const WIDTH = canvas.width;
         const HEIGHT = canvas.height;
         let gameLoopId;
-        const FPS = 60;
 
         let isGameOver = false;
+        let isGamePaused = true; // 初期はポーズ状態
         let gameTime = 0; // 生存時間（フレーム数）
         let gameStartTime = 0; // ゲーム開始時のタイムスタンプ
+        let keys = {};
+        
+        // --- 難易度設定変数 ---
+        let currentDifficulty = 'Easy'; // 初期値
+        let BASE_BULLET_SPEED;
+        let SPAWN_INTERVAL_MS;
+        let TIME_TO_INCREASE_SPEED;
 
-        const keys = {};
+        // --- 難易度ごとのパラメーター設定関数 ---
+        function applyDifficulty(level) {
+            currentDifficulty = level;
+            difficultyTitle.textContent = `難易度: ${level.toUpperCase()}`;
+
+            switch (level) {
+                case 'Easy':
+                    BASE_BULLET_SPEED = 1.8;
+                    SPAWN_INTERVAL_MS = 1200;
+                    TIME_TO_INCREASE_SPEED = 7000;
+                    break;
+                case 'Normal':
+                    BASE_BULLET_SPEED = 2.2;
+                    SPAWN_INTERVAL_MS = 900;
+                    TIME_TO_INCREASE_SPEED = 6000;
+                    break;
+                case 'Hard':
+                    BASE_BULLET_SPEED = 2.5;
+                    SPAWN_INTERVAL_MS = 700;
+                    TIME_TO_INCREASE_SPEED = 5000;
+                    break;
+                case 'Hell':
+                    BASE_BULLET_SPEED = 3.0;
+                    SPAWN_INTERVAL_MS = 500;
+                    TIME_TO_INCREASE_SPEED = 4000;
+                    break;
+                default:
+                    BASE_BULLET_SPEED = 2.0;
+                    SPAWN_INTERVAL_MS = 1000;
+                    TIME_TO_INCREASE_SPEED = 6000;
+            }
+        }
+        
+        // --- 難易度選択UIの処理 ---
+        function selectDifficulty(level) {
+            const buttons = document.querySelectorAll('.difficulty-button');
+            buttons.forEach(btn => {
+                btn.classList.remove('selected');
+                if (btn.getAttribute('data-level') === level) {
+                    btn.classList.add('selected');
+                }
+            });
+            applyDifficulty(level);
+        }
+
+        // 初期選択 (Easy)
+        selectDifficulty('Easy');
+
+        // --- ゲーム開始関数 ---
+        function startGame() {
+            startScreen.style.display = 'none'; // スタート画面を非表示
+            isGamePaused = false;
+            initGame();
+        }
 
         // --- プレイヤーオブジェクト ---
         const player = {
@@ -89,8 +219,6 @@
             focusSpeed: 1.5,
             color: 'white',
             hitboxRadius: 3, // 精密な当たり判定
-            invincible: false,
-            invincibleTime: 0,
             getCenter: function() {
                 return { x: this.x + this.width / 2, y: this.y + this.height / 2 };
             }
@@ -111,9 +239,6 @@
             player.x = WIDTH / 2 - 10;
             player.y = HEIGHT - 50;
             
-            // 初期状態に戻す
-            homeButton.style.display = 'none';
-
             if(gameLoopId) cancelAnimationFrame(gameLoopId);
             gameLoopId = requestAnimationFrame(gameLoop);
         }
@@ -128,15 +253,14 @@
                 this.angle = angle;
                 this.color = color;
                 this.isAlive = true;
-                this.vx = speed * Math.cos(angle);
-                this.vy = speed * Math.sin(angle);
+                this.vx = speed * Math.cos(this.angle);
+                this.vy = speed * Math.sin(this.angle);
             }
 
             update() {
                 this.x += this.vx;
                 this.y += this.vy;
                 
-                // 画面外に出たら消滅
                 if (this.x < -20 || this.x > WIDTH + 20 || this.y < -20 || this.y > HEIGHT + 20) {
                     this.isAlive = false;
                 }
@@ -152,14 +276,16 @@
 
         // --- 弾生成パターン (Spawner) ---
         let spawnerLastTime = 0;
-        const SPWAN_INTERVAL = 1000;
         
         function updateSpawner() {
             const currentTime = Date.now();
-            if (currentTime - spawnerLastTime > SPWAN_INTERVAL) {
-                // 難易度に応じて弾の速度を調整
-                const baseSpeed = 2;
-                const speedMultiplier = 1 + gameTime / 6000; 
+            
+            // 難易度で設定されたインターバルを使用
+            if (currentTime - spawnerLastTime > SPAWN_INTERVAL_MS) {
+                
+                const baseSpeed = BASE_BULLET_SPEED; 
+                // 難易度で設定された時間ファクターを使用
+                const speedMultiplier = 1 + gameTime / TIME_TO_INCREASE_SPEED; 
 
                 // 拡散弾 (扇形)
                 if (Math.random() < 0.5) {
@@ -196,7 +322,7 @@
         // --- 描画関数 ---
 
         function drawPlayer() {
-            if (isGameOver) return;
+            if (isGameOver || isGamePaused) return;
             
             // プレイヤー本体 (回避ゲームなので小さく)
             ctx.fillStyle = player.color;
@@ -229,8 +355,6 @@
             ctx.font = '24px Arial';
             ctx.fillStyle = 'white';
             ctx.fillText('Survival Time: ' + score.toFixed(1) + 's', WIDTH / 2, HEIGHT / 2 + 30);
-
-            homeButton.style.display = 'block'; // ホームボタン表示
         }
         
         function draw() {
@@ -249,7 +373,7 @@
         // --- 更新関数 ---
         
         function updatePlayer() {
-            if (isGameOver) return;
+            if (isGameOver || isGamePaused) return;
             
             // 精密移動 (Shiftキーが押されているか、タッチドラッグ中は自動でON)
             let currentSpeed = keys['Shift'] ? player.focusSpeed : player.speed;
@@ -267,7 +391,8 @@
         }
 
         function updateCollisions() {
-            // 敵弾 vs プレイヤー
+            if (isGameOver || isGamePaused) return;
+
             const playerHitbox = {
                 x: player.getCenter().x - player.hitboxRadius,
                 y: player.getCenter().y - player.hitboxRadius,
@@ -292,7 +417,6 @@
                     
                     if (distSq < minDist**2) {
                         isGameOver = true;
-                        homeButton.style.display = 'block'; // ホームボタン表示
                         return; // ゲームオーバーなので終了
                     }
                 }
@@ -308,18 +432,14 @@
         }
 
         function updateGame() {
-            if (isGameOver) return;
+            if (isGameOver || isGamePaused) return;
 
             updatePlayer();
             updateSpawner();
             
-            // 弾の更新
             enemyBullets.forEach(b => b.update());
-
-            // 衝突判定
             updateCollisions();
 
-            // 弾の除去
             enemyBullets = enemyBullets.filter(b => b.isAlive);
         }
         
@@ -330,6 +450,17 @@
 
             if (!isGameOver) {
                 gameLoopId = requestAnimationFrame(gameLoop);
+            } else {
+                // ゲームオーバー時に再挑戦機能を追加
+                setTimeout(() => {
+                    if (confirm(`GAME OVER! スコア: ${score.toFixed(1)}s\n\nもう一度、難易度 ${currentDifficulty} で挑戦しますか？`)) {
+                        initGame();
+                    } else {
+                        // 再挑戦しない場合はスタート画面に戻る
+                        isGamePaused = true;
+                        startScreen.style.display = 'flex';
+                    }
+                }, 500); // 0.5秒後にダイアログ表示
             }
         }
         
@@ -340,16 +471,13 @@
             if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'].includes(key)) {
                 e.preventDefault();
             }
-            if (key === 'r' && isGameOver) {
-                initGame();
-            }
         });
         document.addEventListener('keyup', (e) => {
             keys[e.key.toLowerCase()] = false;
         });
 
 
-        // タッチ操作関連 (元のコードより)
+        // タッチ操作関連
         let isDragging = false;
         let dragOffsetX = 0;
         let dragOffsetY = 0;
@@ -371,20 +499,19 @@
         }
 
         function handleDragStart(event) {
-            if (isGameOver) return;
+            if (isGameOver || isGamePaused) return;
             const pos = getCanvasMousePosition(event);
             
-            let dragOffsetX = pos.x - player.getCenter().x;
-            let dragOffsetY = pos.y - player.getCenter().y;
+            dragOffsetX = pos.x - player.getCenter().x;
+            dragOffsetY = pos.y - player.getCenter().y;
             
             isDragging = true;
-            // タッチ操作でもキー操作による低速移動を擬似的にオンに
             keys['Shift'] = true; 
             event.preventDefault(); 
         }
 
         function handleDragMove(event) {
-            if (!isDragging || isGameOver) return;
+            if (!isDragging || isGameOver || isGamePaused) return;
             const pos = getCanvasMousePosition(event);
             
             let newX = pos.x - dragOffsetX - player.width / 2;
@@ -401,7 +528,6 @@
 
         function handleDragEnd() {
             isDragging = false;
-            // タッチ操作による低速移動を擬似的にオフに
             keys['Shift'] = false; 
         }
 
@@ -412,12 +538,11 @@
 
         // スマホ/タブレット向けタッチイベント
         canvas.addEventListener('touchstart', handleDragStart);
-        canvas.addEventListener('touchmove', handleDragMove, { passive: false });
+        document.addEventListener('touchmove', handleDragMove, { passive: false });
         document.addEventListener('touchend', handleDragEnd);
-
-        // --- 初期化 ---
-        initGame();
-
+        
+        // 初期描画
+        draw();
     </script>
 </body>
 </html>
