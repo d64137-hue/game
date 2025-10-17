@@ -143,16 +143,21 @@
         let gameLoopId;
 
         let isGameOver = false;
-        let isGamePaused = true; // 初期はポーズ状態
-        let gameTime = 0; // 生存時間（フレーム数）
-        let gameStartTime = 0; // ゲーム開始時のタイムスタンプ
+        let isGamePaused = true; 
+        let gameTime = 0; 
+        let gameStartTime = 0; 
         let keys = {};
         
         // --- 難易度設定変数 ---
-        let currentDifficulty = 'Easy'; // 初期値
+        let currentDifficulty = 'Easy'; 
         let BASE_BULLET_SPEED;
         let SPAWN_INTERVAL_MS;
         let TIME_TO_INCREASE_SPEED;
+        
+        // 難易度ごとの弾幕パターンパラメータ
+        let BASE_BULLET_COUNT_FAN; 
+        let AIMED_SHOT_COUNT; 
+        let CORNER_ATTACK_CHANCE; // 0.0 to 1.0
 
         // --- 難易度ごとのパラメーター設定関数 ---
         function applyDifficulty(level) {
@@ -162,23 +167,35 @@
             switch (level) {
                 case 'Easy':
                     BASE_BULLET_SPEED = 1.8;
-                    SPAWN_INTERVAL_MS = 1200;
+                    SPAWN_INTERVAL_MS = 1500; // 緩やか
                     TIME_TO_INCREASE_SPEED = 7000;
+                    BASE_BULLET_COUNT_FAN = 10;
+                    AIMED_SHOT_COUNT = 0;
+                    CORNER_ATTACK_CHANCE = 0;
                     break;
                 case 'Normal':
                     BASE_BULLET_SPEED = 2.2;
-                    SPAWN_INTERVAL_MS = 900;
+                    SPAWN_INTERVAL_MS = 1000; // 標準
                     TIME_TO_INCREASE_SPEED = 6000;
+                    BASE_BULLET_COUNT_FAN = 15;
+                    AIMED_SHOT_COUNT = 3;
+                    CORNER_ATTACK_CHANCE = 0;
                     break;
                 case 'Hard':
                     BASE_BULLET_SPEED = 2.5;
                     SPAWN_INTERVAL_MS = 700;
                     TIME_TO_INCREASE_SPEED = 5000;
+                    BASE_BULLET_COUNT_FAN = 20;
+                    AIMED_SHOT_COUNT = 5;
+                    CORNER_ATTACK_CHANCE = 0.5; // 50%で発動
                     break;
                 case 'Hell':
                     BASE_BULLET_SPEED = 3.0;
                     SPAWN_INTERVAL_MS = 500;
                     TIME_TO_INCREASE_SPEED = 4000;
+                    BASE_BULLET_COUNT_FAN = 30;
+                    AIMED_SHOT_COUNT = 8;
+                    CORNER_ATTACK_CHANCE = 1.0; // 常に発動
                     break;
                 default:
                     BASE_BULLET_SPEED = 2.0;
@@ -204,7 +221,7 @@
 
         // --- ゲーム開始関数 ---
         function startGame() {
-            startScreen.style.display = 'none'; // スタート画面を非表示
+            startScreen.style.display = 'none'; 
             isGamePaused = false;
             initGame();
         }
@@ -218,14 +235,14 @@
             speed: 4,
             focusSpeed: 1.5,
             color: 'white',
-            hitboxRadius: 3, // 精密な当たり判定
+            hitboxRadius: 3, 
             getCenter: function() {
                 return { x: this.x + this.width / 2, y: this.y + this.height / 2 };
             }
         };
 
         let enemyBullets = [];
-        let score = 0; // 生存秒数をスコアとする
+        let score = 0; 
 
         // --- ゲーム初期化 ---
         function initGame() {
@@ -235,7 +252,6 @@
             score = 0;
             gameStartTime = Date.now();
             
-            // プレイヤー位置をリセット
             player.x = WIDTH / 2 - 10;
             player.y = HEIGHT - 50;
             
@@ -274,44 +290,81 @@
             }
         }
 
-        // --- 弾生成パターン (Spawner) ---
+        // --- 弾生成パターン関数 ---
+        
+        // パターン 2: プレイヤー狙い撃ち (マゼンタ)
+        function spawnAimedShot(num, speedMultiplier) {
+            const playerX = player.getCenter().x;
+            const playerY = player.getCenter().y;
+            const startX = WIDTH * Math.random();
+            const startY = 0; 
+            
+            // プレイヤー位置へ向かう角度
+            const angleToPlayer = Math.atan2(playerY - startY, playerX - startX);
+
+            for(let i = 0; i < num; i++) {
+                // わずかに拡散させて弾幕の厚みを出す
+                const spreadAngle = angleToPlayer + (i - (num - 1) / 2) * 0.1; 
+                const speed = BASE_BULLET_SPEED * 1.3 * speedMultiplier; // 通常より速い
+                
+                enemyBullets.push(new EnemyBullet(
+                    startX, startY, 6, speed, spreadAngle, 'magenta'
+                ));
+            }
+        }
+        
+        // パターン 3: 固定交差弾 (イエロー)
+        function spawnCornerAttack(speedMultiplier) {
+            const bulletSpeed = BASE_BULLET_SPEED * 0.8 * speedMultiplier;
+            const numSpikes = 5;
+            
+            // Top-Left (0, 0) から Bottom-Right へ
+            let angleTL = Math.atan2(HEIGHT - 0, WIDTH - 0);
+            for(let i = 0; i < numSpikes; i++) {
+                enemyBullets.push(new EnemyBullet(0, 0, 7, bulletSpeed, angleTL + (i - (numSpikes-1)/2) * 0.05, 'yellow'));
+            }
+
+            // Top-Right (WIDTH, 0) から Bottom-Left へ
+            let angleTR = Math.atan2(HEIGHT - 0, 0 - WIDTH);
+            for(let i = 0; i < numSpikes; i++) {
+                enemyBullets.push(new EnemyBullet(WIDTH, 0, 7, bulletSpeed, angleTR + (i - (numSpikes-1)/2) * 0.05, 'yellow'));
+            }
+        }
+        
+        // --- 弾生成パターン (Spawner) の更新 ---
         let spawnerLastTime = 0;
         
         function updateSpawner() {
             const currentTime = Date.now();
             
-            // 難易度で設定されたインターバルを使用
             if (currentTime - spawnerLastTime > SPAWN_INTERVAL_MS) {
                 
                 const baseSpeed = BASE_BULLET_SPEED; 
-                // 難易度で設定された時間ファクターを使用
                 const speedMultiplier = 1 + gameTime / TIME_TO_INCREASE_SPEED; 
+                
+                // 1. 基本となる拡散弾 (CYAN) - 難易度によって弾数が変わる
+                const numBullets = BASE_BULLET_COUNT_FAN; 
+                const startAngle = Math.PI / 4;
+                const endAngle = 3 * Math.PI / 4;
+                const center = WIDTH * Math.random();
+                
+                for(let i = 0; i < numBullets; i++) {
+                    const angle = startAngle + (endAngle - startAngle) * (i / (numBullets - 1));
+                    enemyBullets.push(new EnemyBullet(
+                        center, 0, 5, baseSpeed * speedMultiplier, angle, 'cyan'
+                    ));
+                }
 
-                // 拡散弾 (扇形)
-                if (Math.random() < 0.5) {
-                    const startAngle = Math.PI / 4;
-                    const endAngle = 3 * Math.PI / 4;
-                    const numBullets = 15;
-                    const center = WIDTH * Math.random();
-                    
-                    for(let i = 0; i < numBullets; i++) {
-                        const angle = startAngle + (endAngle - startAngle) * (i / (numBullets - 1));
-                        enemyBullets.push(new EnemyBullet(
-                            center, 0, 5, baseSpeed * speedMultiplier, angle, 'cyan'
-                        ));
+                // 2. 追尾弾 (MAGENTA) - Normal以上で発動
+                if (AIMED_SHOT_COUNT > 0) {
+                    if (currentDifficulty === 'Hell' || Math.random() < 0.5) { // Hellは常に、他は50%で
+                        spawnAimedShot(AIMED_SHOT_COUNT, speedMultiplier);
                     }
-                } 
-                // 渦巻き弾
-                else {
-                    const center = { x: WIDTH / 2, y: HEIGHT / 2 };
-                    const num = 10;
-                    const offset = gameTime * 0.0001; 
-                    for(let i = 0; i < num; i++) {
-                        const angle = (2 * Math.PI / num) * i + offset;
-                        enemyBullets.push(new EnemyBullet(
-                            center.x, 0, 4, baseSpeed * 1.5 * speedMultiplier, angle, 'magenta'
-                        ));
-                    }
+                }
+
+                // 3. 固定パターン (YELLOW) - Hard以上で発動
+                if (Math.random() < CORNER_ATTACK_CHANCE) {
+                    spawnCornerAttack(speedMultiplier);
                 }
                 
                 spawnerLastTime = currentTime;
@@ -320,24 +373,21 @@
 
 
         // --- 描画関数 ---
-
+        // ... (省略: 描画関数は変更なし)
         function drawPlayer() {
             if (isGameOver || isGamePaused) return;
             
-            // プレイヤー本体 (回避ゲームなので小さく)
             ctx.fillStyle = player.color;
             ctx.fillRect(player.x, player.y, player.width, player.height);
 
-            // ヒットボックスの表示 (常時表示)
             ctx.beginPath();
             ctx.arc(player.getCenter().x, player.getCenter().y, player.hitboxRadius, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(255, 255, 0, 0.7)'; // 黄色の半透明
+            ctx.fillStyle = 'rgba(255, 255, 0, 0.7)'; 
             ctx.fill();
         }
         
         function drawHUD() {
-            // 生存時間をスコアとして表示
-            score = Math.floor((Date.now() - gameStartTime) / 100) / 10; // 0.1秒単位
+            score = Math.floor((Date.now() - gameStartTime) / 100) / 10; 
             
             ctx.fillStyle = '#ff9800';
             ctx.font = '24px Arial';
@@ -375,7 +425,6 @@
         function updatePlayer() {
             if (isGameOver || isGamePaused) return;
             
-            // 精密移動 (Shiftキーが押されているか、タッチドラッグ中は自動でON)
             let currentSpeed = keys['Shift'] ? player.focusSpeed : player.speed;
 
             if (keys['ArrowLeft'] || keys['a']) player.x -= currentSpeed;
@@ -383,7 +432,6 @@
             if (keys['ArrowUp'] || keys['w']) player.y -= currentSpeed;
             if (keys['ArrowDown'] || keys['s']) player.y += currentSpeed;
 
-            // 境界チェック
             player.x = Math.max(0, Math.min(player.x, WIDTH - player.width));
             player.y = Math.max(0, Math.min(player.y, HEIGHT - player.height));
             
@@ -409,21 +457,18 @@
                     height: eb.radius * 2
                 };
                 
-                // 簡易矩形判定（高速化のため）
                 if (checkCollision(bulletHitbox, playerHitbox)) {
-                    // 円形判定（より正確に）
                     const distSq = (eb.x - player.getCenter().x)**2 + (eb.y - player.getCenter().y)**2;
                     const minDist = eb.radius + player.hitboxRadius;
                     
                     if (distSq < minDist**2) {
                         isGameOver = true;
-                        return; // ゲームオーバーなので終了
+                        return; 
                     }
                 }
             }
         }
         
-        // 矩形衝突判定
         function checkCollision(r1, r2) {
             return r1.x < r2.x + r2.width &&
                    r1.x + r1.width > r2.x &&
@@ -451,20 +496,18 @@
             if (!isGameOver) {
                 gameLoopId = requestAnimationFrame(gameLoop);
             } else {
-                // ゲームオーバー時に再挑戦機能を追加
                 setTimeout(() => {
                     if (confirm(`GAME OVER! スコア: ${score.toFixed(1)}s\n\nもう一度、難易度 ${currentDifficulty} で挑戦しますか？`)) {
                         initGame();
                     } else {
-                        // 再挑戦しない場合はスタート画面に戻る
                         isGamePaused = true;
                         startScreen.style.display = 'flex';
                     }
-                }, 500); // 0.5秒後にダイアログ表示
+                }, 500); 
             }
         }
         
-        // --- イベントリスナー ---
+        // --- イベントリスナー (省略: プレイヤー操作関連は変更なし) ---
         document.addEventListener('keydown', (e) => {
             const key = e.key.toLowerCase();
             keys[key] = true;
@@ -476,8 +519,6 @@
             keys[e.key.toLowerCase()] = false;
         });
 
-
-        // タッチ操作関連
         let isDragging = false;
         let dragOffsetX = 0;
         let dragOffsetY = 0;
@@ -531,17 +572,14 @@
             keys['Shift'] = false; 
         }
 
-        // PC向けマウスイベント
         canvas.addEventListener('mousedown', handleDragStart);
         document.addEventListener('mousemove', handleDragMove);
         document.addEventListener('mouseup', handleDragEnd);
 
-        // スマホ/タブレット向けタッチイベント
         canvas.addEventListener('touchstart', handleDragStart);
         document.addEventListener('touchmove', handleDragMove, { passive: false });
         document.addEventListener('touchend', handleDragEnd);
         
-        // 初期描画
         draw();
     </script>
 </body>
