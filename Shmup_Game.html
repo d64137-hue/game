@@ -86,6 +86,16 @@
             background-color: #1E90FF !important; /* 青色 */
             color: white !important;
         }
+        #reset-button {
+            margin-top: 15px; 
+            padding: 10px 15px; 
+            background-color: #FF4136; 
+            color: white; 
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -138,17 +148,19 @@
         let isDragging = false; 
         
         // --- 永続アップグレード (クリスタル通貨) ---
-        const PERM_STATS = load('permStats', {
-            goldMultiplier: 1,      // GOLD獲得倍率
-            baseMaxHp: 150,         // 初期最大HPを150に引き上げ
-            baseDmgBonus: 0,        // 初期火力ボーナス
-        });
+        // GOLD獲得倍率の初期値を1に戻し、計算上のバグを防ぐ
+        const defaultPermStats = {
+            goldMultiplier: 1,      
+            baseMaxHp: 150,         
+            baseDmgBonus: 0,        
+        };
+        const PERM_STATS = load('permStats', defaultPermStats);
         
         // --- ゲーム定数とアップグレードシステム ---
         const BASE_FIRE_RATE = 8;
         const BASE_MOVE_SPEED = 4.5;
         const BASE_BULLET_DMG = 10;
-        const BASE_HEAL_AMOUNT = 50; // HP回復量を50に
+        const BASE_HEAL_AMOUNT = 50; 
         
         let stats = {
             gold: 0,
@@ -160,7 +172,7 @@
             moveSpeed: BASE_MOVE_SPEED,
         };
 
-        // スキルデータ (J, K, Lのみ)
+        // スキルデータ
         let skillData = {
             HEAL: { name: "リカバリー (J)", cd: 60 * 1.5, currentCd: 0, cost: 200, key: 'j', level: 0, maxLevel: 5 },
             FULL_BURST: { name: "フルバースト (K)", cd: 60 * 0.75, currentCd: 0, cost: 150, key: 'k', level: 0, maxLevel: 5 },
@@ -218,14 +230,16 @@
             }
             
             takeDamage(damage) {
-                if (skillEffects.barrier > 0) return; // 無敵中
+                if (skillEffects.barrier > 0) return; 
 
                 this.currentHp -= damage;
-                stats.currentHp = this.currentHp;
+                // バグ修正: HPが0以下になったら直ちにゲームオーバー判定を行う
                 if (this.currentHp <= 0) {
+                    this.currentHp = 0; // HPを0に固定
+                    stats.currentHp = 0;
                     gameOver();
                 } else {
-                    // ダメージ時の点滅
+                    stats.currentHp = this.currentHp;
                 }
             }
             
@@ -235,7 +249,8 @@
                 const pBarHeight = 15;
                 const pBarX = WIDTH - pBarWidth - 10;
                 const pBarY = HEIGHT - pBarHeight - 10;
-                const pRatio = this.currentHp / stats.maxHp;
+                // HP表示も常にstats.currentHpから取得
+                const pRatio = Math.max(0, stats.currentHp) / stats.maxHp; 
 
                 ctx.fillStyle = '#444';
                 ctx.fillRect(pBarX, pBarY, pBarWidth, pBarHeight);
@@ -248,7 +263,7 @@
                 ctx.fillStyle = 'white';
                 ctx.font = '12px sans-serif';
                 ctx.textAlign = 'right';
-                ctx.fillText(`HP: ${Math.max(0, Math.floor(this.currentHp))}/${stats.maxHp}`, pBarX + pBarWidth, pBarY - 5);
+                ctx.fillText(`HP: ${Math.max(0, Math.floor(stats.currentHp))}/${stats.maxHp}`, pBarX + pBarWidth, pBarY - 5);
             }
 
             draw() {
@@ -330,7 +345,7 @@
                 this.health = initialHP;
                 this.fireTimer = 0;
                 this.firePattern = 0; 
-                this.patternInterval = 60; // 弾幕パターンの基本間隔を短縮 (60フレーム/秒)
+                this.patternInterval = 60; 
                 this.isBoss = currentWave % 5 === 0;
             }
 
@@ -340,7 +355,6 @@
 
                 this.fireTimer++;
                 
-                // 発射頻度を上げる (通常は40-80F、ボスは45-75F程度で: ボスの頻度を少し緩める)
                 let baseInterval = this.isBoss ? 55 : 60; 
                 
                 if (this.fireTimer > baseInterval + Math.random() * 20) {
@@ -355,8 +369,8 @@
 
             shoot() {
                 let center = this.getCenter();
-                // 敵弾の基本速度の上昇幅をさらに緩やかにする (0.15から0.1へ)
-                let speed = 2.5 + (currentWave / 10); 
+                // 🔥バランス調整: 敵弾の基本速度の上昇幅をさらに緩和 (1/10 -> 1/15)
+                let speed = 2.5 + (currentWave / 15); 
                 
                 // 難易度による速度制限 (最大速度を調整)
                 speed = Math.min(speed, 5.5); 
@@ -388,10 +402,9 @@
                             enemyBullets.push(new EnemyBullet(center.x, center.y, dy, 'purple', dx, 3));
                         }
                         break;
-                    case 2: // プレイヤー狙い追尾弾 (緑: 低速追尾) - 速度は遅いまま
+                    case 2: // プレイヤー狙い追尾弾 (緑: 低速追尾)
                         if (currentWave >= 2) {
                             let angle = Math.atan2(player.getCenter().y - center.y, player.getCenter().x - center.x);
-                            // 追尾弾の基本速度をさらに低く調整 (突然の死対策)
                             let currentFollowSpeed = Math.min(1.0, 0.8 + currentWave * 0.05); 
                             let dx = Math.cos(angle) * currentFollowSpeed; 
                             let dy = Math.sin(angle) * currentFollowSpeed;
@@ -413,7 +426,6 @@
                         startAngle = Math.atan2(player.getCenter().y - center.y, player.getCenter().x - center.x) - angleStep * (num - 1) / 2;
                         for (let i = 0; i < num; i++) {
                             let angle = startAngle + i * angleStep;
-                            // 高速弾の速度を少し落とす (突然の死対策)
                             let highSpeed = Math.min(speed * 1.3, 7.0); 
                             let dx = Math.cos(angle) * highSpeed;
                             let dy = Math.sin(angle) * highSpeed;
@@ -432,7 +444,7 @@
                         num = 6 + bulletDensity * 2;
                         for (let i = 0; i < num; i++) {
                             let angle = Math.random() * Math.PI * 2;
-                            let s = speed * (1.2 + Math.random() * 0.3); // 速度を少し抑える
+                            let s = speed * (1.2 + Math.random() * 0.3); 
                             let dx = Math.cos(angle) * s;
                             let dy = Math.sin(angle) * s;
                             enemyBullets.push(new EnemyBullet(center.x, center.y, dy, 'white', dx, 3));
@@ -441,7 +453,6 @@
                     case 7: // プレイヤーの現在位置への誘導弾 (赤色、高速)
                         if (currentWave >= 3) {
                             let angle = Math.atan2(player.getCenter().y - center.y, player.getCenter().x - center.x);
-                            // 高速誘導弾の速度を少し落とす
                             let fastTargetSpeed = Math.min(speed * 1.0, 6.0);
                             let dx = Math.cos(angle) * fastTargetSpeed;
                             let dy = Math.sin(angle) * fastTargetSpeed;
@@ -449,25 +460,23 @@
                             enemyBullets.push(new EnemyBullet(center.x, center.y, dy * 0.5, '#FF5733', dx * 0.5, 4)); 
                         }
                         break;
-                    case 8: // (新) 広範囲反射弾 (ピンク: 左右端で跳ねる)
+                    case 8: // (新) 広範囲反射弾 (ピンク: 左右端で跳ねる) - 反射回数4
                         num = 8 + bulletDensity;
                         for (let i = 0; i < num; i++) {
-                            // 左右に広く拡散する弾を生成
                             let startX = center.x + (i - num/2) * 20; 
                             let angle = Math.atan2(player.getCenter().y - center.y, player.getCenter().x - startX);
                             let dx = Math.cos(angle) * speed * 0.8;
                             let dy = Math.sin(angle) * speed * 0.8;
-                            // bounceを1に設定し、1回だけ反射させる
-                            enemyBullets.push(new EnemyBullet(startX, center.y, dy, 'pink', dx, 4, 0, false, 1));
+                            enemyBullets.push(new EnemyBullet(startX, center.y, dy, 'pink', dx, 4, 0, false, 4));
                         }
                         break;
-                    case 9: // カーテン (上下左右にずれたライン)
+                    case 9: // カーテン (上下左右にずれたライン) - 半径4
                         num = 10 + bulletDensity * 2;
                         for (let i = 0; i < num; i++) {
                             let dx = 0;
                             let dy = speed * 0.4;
                             let spawnX = (WIDTH / num) * i + Math.sin(gameFrame * 0.1) * 10;
-                            enemyBullets.push(new EnemyBullet(spawnX, 0, dy, 'gray', dx, 6));
+                            enemyBullets.push(new EnemyBullet(spawnX, 0, dy, 'gray', dx, 4)); 
                         }
                         break;
                     case 10: // (ボス) ターゲットリング
@@ -485,7 +494,7 @@
                     case 11: // (ボス) 8方向ランダムウェーブ
                         if (this.isBoss) {
                             num = 8;
-                            for (let j = 0; j < 3; j++) { // 3重の弾を生成
+                            for (let j = 0; j < 3; j++) { 
                                 for (let i = 0; i < num; i++) {
                                     let angle = (i * Math.PI / 4) + Math.sin(gameFrame * 0.05 + j * 10) * 0.2;
                                     let s = speed * 0.5 + j * 0.3;
@@ -554,13 +563,12 @@
                 let dx = this.baseDx;
                 let dy = this.baseDy;
 
-                // 追尾弾処理 (追尾速度を大幅に下げているため、ベース速度で処理)
+                // 追尾弾処理
                 if (this.frames < this.followDuration) {
                     let target = player.getCenter();
                     let angle = Math.atan2(target.y - this.y, target.x - this.x);
                     let speed = Math.sqrt(this.baseDx * this.baseDx + this.baseDy * this.baseDy);
                     
-                    // 追尾速度を大幅に下げ、ベース速度を維持
                     dx = Math.cos(angle) * speed;
                     dy = Math.sin(angle) * speed;
                 }
@@ -572,7 +580,6 @@
                 if (this.bounce > 0) {
                     let bounced = false;
                     
-                    // 左右の壁で反射
                     if (this.x - this.radius < 0) {
                         this.baseDx = Math.abs(this.baseDx);
                         bounced = true;
@@ -581,7 +588,6 @@
                         bounced = true;
                     }
                     
-                    // 上下の壁で反射 (上壁は敵がいるためあまり使わないが、下壁で跳ねると難易度が高い)
                     if (this.y - this.radius < 0) {
                         this.baseDy = Math.abs(this.baseDy);
                         bounced = true;
@@ -646,7 +652,7 @@
             
             // 敵の初期化 (HPの上昇率を緩やかに)
             const baseHP = 500;
-            const hpMultiplier = 1.25; // インフレ率を調整
+            const hpMultiplier = 1.25; 
             let initialHP = Math.floor(baseHP * Math.pow(hpMultiplier, currentWave - 1));
             
             if (currentWave % 5 === 0) { 
@@ -658,7 +664,7 @@
             
             enemy = new Enemy(initialHP);
             player = new Player();
-            player.currentHp = stats.currentHp; 
+            player.currentHp = stats.currentHp; // 永続値からHPをロード
             
             playerBullets = [];
             enemyBullets = [];
@@ -686,6 +692,8 @@
                 let gainedCrystal = Math.max(1, Math.floor(baseCrystal * crystalMultiplier));
                 
                 stats.crystal += gainedCrystal;
+                // クリスタル残高を保存
+                save('crystal', stats.crystal); 
                 alert(`BOSS DEFEATED! \nクリスタルを ${gainedCrystal} 個獲得しました！`);
             }
             
@@ -722,6 +730,8 @@
                 if (dist < bullet.radius + playerCenter.radius) {
                     player.takeDamage(10); 
                     updateDisplay();
+                    // ゲームオーバーした場合は、この後の処理をスキップ
+                    if (gameStatus === 'gameover') return false; 
                     return false; 
                 }
                 return !bullet.update(); 
@@ -762,7 +772,8 @@
         
         function activateSkill(skillId) {
             const skill = skillData[skillId];
-            if (skill.currentCd > 0 || player.currentHp <= 0) return;
+            // バグ修正: HPが0の時はスキル発動不可
+            if (skill.currentCd > 0 || stats.currentHp <= 0) return;
             
             skill.currentCd = skill.cd * (1 - skill.level * 0.05);
             
@@ -866,7 +877,7 @@
                 else if(item.stat === 'moveSpeed') currentLevel = (currentVal - BASE_MOVE_SPEED) / item.step;
                 else if(item.stat === 'maxHp') currentLevel = (currentVal - PERM_STATS.baseMaxHp) / item.step;
                 
-                const currentCost = item.baseCost + currentLevel * 50; 
+                const currentCost = item.baseCost + Math.floor(currentLevel) * 50; // コスト計算を整数に
                 const buttonText = item.type === 'heal' ? `回復 ${item.baseCost}G` : `強化 ${currentCost}G`;
                 const isDisabled = stats.gold < currentCost || (item.stat === 'currentHp' && stats.currentHp >= stats.maxHp);
                 const nextVal = item.stat === 'fireRate' ? Math.max(item.min || 1, currentVal + item.step) : currentVal + item.step;
@@ -967,16 +978,18 @@
                 const currentVal = PERM_STATS[item.stat];
                 
                 let currentLevel = 0;
-                if(item.stat === 'goldMultiplier') currentLevel = (currentVal - 1) / item.step;
-                else if(item.stat === 'baseMaxHp') currentLevel = (currentVal - PERM_STATS.baseMaxHp) / item.step;
-                else if(item.stat === 'baseDmgBonus') currentLevel = (currentVal - BASE_BULLET_DMG) / item.step;
+                if(item.stat === 'goldMultiplier') currentLevel = (currentVal - defaultPermStats.goldMultiplier) / item.step;
+                else if(item.stat === 'baseMaxHp') currentLevel = (currentVal - defaultPermStats.baseMaxHp) / item.step;
+                else if(item.stat === 'baseDmgBonus') currentLevel = (currentVal - defaultPermStats.baseDmgBonus) / item.step;
                 
                 const currentCost = Math.floor(item.costBase * Math.pow(item.costMulti, currentLevel)); 
                 const isDisabled = stats.crystal < currentCost || currentLevel >= item.max;
                 const buttonText = currentLevel >= item.max ? "MAX" : `強化 ${currentCost}C`;
                 
-                const nextVal = item.stat === 'goldMultiplier' ? `${(currentVal + item.step) * 100}%` : `+${item.step}`;
-                const detailText = `現在の値: ${item.stat === 'goldMultiplier' ? `${currentVal * 100}%` : currentVal} → Next: ${nextVal}`;
+                // バグ修正: GOLD_MULTIの表示を丸める
+                const displayCurrentVal = item.stat === 'goldMultiplier' ? `${(currentVal * 100).toFixed(0)}%` : currentVal;
+                const nextVal = item.stat === 'goldMultiplier' ? `${((currentVal + item.step) * 100).toFixed(0)}%` : `+${item.step}`;
+                const detailText = `現在の値: ${displayCurrentVal} → Next: ${nextVal}`;
 
                 html += `<div class="shop-item">
                             <div>${item.name} <span style="font-size:0.8em; color:#bbb;">(Lv.${Math.floor(currentLevel)}/${item.max})</span></div>
@@ -986,6 +999,11 @@
             });
             html += `</div>`;
 
+            // 🔥要望追加: 永続アップグレードのリセットボタン
+            html += `<button id="reset-button" onclick="resetPermanentUpgrades()">
+                        全永久アップグレードとCRYSTAL残高をリセット
+                    </button>`;
+            
             html += `<button onclick="restartGame()" style="padding: 15px 30px; font-size: 1.5em; background: #FF4136; color: white; border: none; border-radius: 5px; margin-top: 20px;">WAVE 1 からやり直す</button>`;
             
             permContainer.innerHTML = html;
@@ -1000,6 +1018,7 @@
             PERM_STATS[item.stat] = PERM_STATS[item.stat] += item.step;
             stats.crystal -= cost;
 
+            // ローカルストレージに保存
             save('permStats', PERM_STATS);
             save('crystal', stats.crystal);
             updatePermShopDisplay();
@@ -1026,6 +1045,22 @@
             document.getElementById('overlay').style.display = 'flex';
             document.getElementById('start-screen').style.display = 'flex';
             gameStatus = 'init';
+        }
+        
+        // 🔥追加機能: 永続アップグレードのリセット
+        function resetPermanentUpgrades() {
+            if (confirm("本当に全ての永久アップグレードとCRYSTAL残高をリセットしますか？この操作は元に戻せません。")) {
+                // localStorageのデータを初期値で上書き（削除と同義）
+                localStorage.removeItem('permStats');
+                localStorage.removeItem('crystal');
+                
+                // 現在のメモリ上のstatsも初期化
+                Object.assign(PERM_STATS, defaultPermStats);
+                stats.crystal = 0;
+                
+                alert("永久アップグレードとCRYSTAL残高をリセットしました。ゲームを再ロードします。");
+                window.location.reload();
+            }
         }
 
 
@@ -1059,7 +1094,7 @@
             requestAnimationFrame(gameLoop);
         }
 
-        // --- イベントリスナー ---
+        // --- イベントリスナー (省略) ---
         
         window.addEventListener('keydown', (e) => {
             keys[e.key] = true;
