@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>弾幕シューティングゲーム</title>
+    <title>弾幕シューティングゲーム (Waveサバイバル/アップグレード版)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
         body { 
@@ -20,7 +20,7 @@
             margin-bottom: 20px;
         }
         #NewGameArea {
-            max-width: 600px; 
+            max-width: 600px; /* Canvasサイズに合わせて調整 */
             margin: 0 auto;
             padding: 20px;
             border: 1px solid #444;
@@ -28,7 +28,6 @@
             background: #1e1e1e;
         }
         #NewGameCanvas {
-            /* Canvasサイズを500x650に統一 */
             background: #00001a;
             border: 2px solid #76FF03;
             display: block;
@@ -36,430 +35,964 @@
             cursor: pointer; 
             touch-action: none; 
         }
-        /* 削除された .back-button のスタイルは不要 */
-        .home-button {
-            margin-top: 20px;
-            padding: 10px 20px;
-            background-color: #4CAF50; /* 緑 */
+        #game-info {
+            font-size: 1.2em;
+            margin-bottom: 10px;
+            color: #76FF03;
+        }
+        /* ショップ画面用スタイル */
+        #shop-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
             color: white;
-            border: none;
-            cursor: pointer;
-            font-size: 16px;
+            padding: 20px;
+            box-sizing: border-box;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .shop-panel {
+            background: #333;
+            padding: 15px;
+            margin-bottom: 15px;
             border-radius: 5px;
-            display: none; /* 初期は非表示 */
+            width: 90%;
+            max-width: 500px;
+            text-align: left;
+        }
+        .shop-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            padding: 5px 0;
+            border-bottom: 1px dashed #555;
+        }
+        .shop-item:last-child {
+            border-bottom: none;
+        }
+        .shop-item button {
+            padding: 8px 15px;
+            background-color: #76FF03;
+            color: #1e1e1e;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: opacity 0.1s;
+        }
+        .shop-item button:disabled {
+            background-color: #555;
+            color: #aaa;
+            cursor: not-allowed;
+        }
+        .shop-item .details {
+            font-size: 0.9em;
+            color: #ccc;
         }
     </style>
 </head>
 <body>
     <div id="NewGameArea">
-        <h1>弾幕シューティングゲーム</h1>
-        <canvas id="NewGameCanvas" width="500" height="650"></canvas>
-        <div id="control-info">
-            キー: **WASD** or **矢印**で移動 / **Z** or **スペース**で射撃 / **Shift**で低速移動
+        <h1>🌌 Waveサバイバルシューティング</h1>
+        
+        <div id="game-info">
+            Wave: <span id="wave-display">1</span> | GOLD: <span id="gold-display">0</span> | Lives: <span id="lives-display">3</span>
         </div>
-        <button id="homeButton" class="home-button" onclick="location.href='Game_Portal.html'">
-            ホームへ戻る
-        </button>
+
+        <div style="position: relative;">
+            <canvas id="NewGameCanvas" width="500" height="650"></canvas>
+            
+            <div id="overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center;">
+                <div id="start-screen" style="background: rgba(0, 0, 0, 0.9); padding: 40px; border-radius: 10px; text-align: center;">
+                    <h2>Waveサバイバル開始！</h2>
+                    <p>WASD/矢印キーで移動、X/スペースで攻撃。<br>J, K, Lでスキル発動！</p>
+                    <button onclick="startGame()" style="padding: 15px 30px; font-size: 1.5em; background: #76FF03; color: black; border: none; border-radius: 5px; margin-top: 20px;">スタート WAVE 1</button>
+                </div>
+
+                <div id="shop-container" style="display: none;">
+                    </div>
+            </div>
+        </div>
     </div>
     
     <script>
-        // --- 変数定義 ---
         const canvas = document.getElementById('NewGameCanvas');
         const ctx = canvas.getContext('2d');
-        const homeButton = document.getElementById('homeButton'); // 追加
-
         const WIDTH = canvas.width;
         const HEIGHT = canvas.height;
-        let gameLoopId;
-        let lastTime = 0;
-        const FPS = 60;
-        const FRAME_TIME = 1000 / FPS;
 
-        let isGameOver = false;
+        // --- ゲーム状態変数 ---
+        let gameStatus = 'init'; // 'init', 'playing', 'shop', 'gameover'
+        let currentWave = 0;
+        let score = 0;
+        let keys = {};
+        let player;
+        let enemy;
+        let playerBullets = [];
+        let enemyBullets = [];
+        let items = []; // GOLDドロップアイテム用
 
-        const keys = {};
+        let gameFrame = 0;
+        let isDragging = false; 
+        let dragOffsetX = 0;
+        let dragOffsetY = 0; 
+        
+        const TRAIL_LENGTH = 10;
+        const trail = []; 
 
-        // --- プレイヤーオブジェクト ---
-        const player = {
-            x: WIDTH / 2 - 10,
-            y: HEIGHT - 50,
-            width: 20,
-            height: 20,
-            speed: 4,
-            focusSpeed: 1.5,
-            color: 'lime',
-            isShooting: false,
-            canShoot: true,
-            shootCooldown: 100,
-            lastShotTime: 0,
-            hitboxRadius: 3,
-            maxHP: 5,
-            hp: 5,
-            invincible: false,
-            invincibleTime: 0,
-            getCenter: function() {
-                return { x: this.x + this.width / 2, y: this.y + this.height / 2 };
-            }
+        // --- ゲーム定数とアップグレードシステム ---
+        const BASE_FIRE_RATE = 8; // 8フレームに1発
+        const BASE_MOVE_SPEED = 4.5;
+        const BASE_BULLET_DMG = 10;
+        const BASE_MAX_LIVES = 3;
+
+        let stats = {
+            gold: 0,
+            lives: BASE_MAX_LIVES,
+            maxLives: BASE_MAX_LIVES,
+            bulletDmg: BASE_BULLET_DMG,
+            fireRate: BASE_FIRE_RATE,
+            moveSpeed: BASE_MOVE_SPEED,
         };
 
-        let bullets = [];
-        let enemies = [];
-        let enemyBullets = [];
-        let score = 0;
-
-        // --- ゲーム初期化 ---
-        function initGame() {
-            // (初期化ロジックは省略しませんが、今回はそのまま維持します)
-            player.hp = player.maxHP;
-            isGameOver = false;
-            bullets = [];
-            enemies = [];
-            enemyBullets = [];
-            score = 0;
-            // 初期状態に戻す
-            homeButton.style.display = 'none';
-
-            // ... (敵の初期化ロジックはそのまま維持)
-            for(let i = 0; i < 5; i++) {
-                enemies.push(new Enemy(50 + i * 80, 50, 40, 40, 'red', 10, 100));
-            }
-
-            if(gameLoopId) cancelAnimationFrame(gameLoopId);
-            gameLoopId = requestAnimationFrame(gameLoop);
-        }
+        let skillData = {
+            HEAL: { level: 0, cd: 90, currentCd: 0, cost: 200, key: 'j', maxLevel: 5 },
+            FULL_BURST: { level: 0, cd: 45, currentCd: 0, cost: 150, key: 'k', maxLevel: 5 },
+            BOMB: { level: 0, cd: 60, currentCd: 0, cost: 300, key: 'l', maxLevel: 5 },
+            SLOW_FIELD: { level: 0, cd: 40, currentCd: 0, cost: 250, key: 'i', maxLevel: 3 },
+            MAGNET: { level: 0, cd: 75, currentCd: 0, cost: 200, key: 'o', maxLevel: 3 },
+            TRACE_LASER: { level: 0, cd: 50, currentCd: 0, cost: 350, key: 'p', maxLevel: 5 }
+        };
+        // スキルをJ, K, Lに割り当てる (この配列で管理)
+        let equippedSkills = ['HEAL', 'FULL_BURST', 'BOMB']; 
         
-        // ... (省略)
-        // [Enemy] クラスや [Bullet] クラスなどの定義は、元のコードから変更なしで続きます。
-        // ただし、長くなるため、ここではロジックの変更点のみを重点的に示します。
+        // スキル発動中の状態
+        let skillEffects = {
+            fullBurst: 0, 
+            slowField: 0,
+            magnet: 0,
+            traceLaser: { active: false, x: 0, y: 0, duration: 0 }
+        };
 
-        // --- クラス定義 (省略せずに維持) ---
+        const SHOP_ITEMS = {
+            BULLET_DMG: { name: "火力アップ", type: "stat", desc: "弾のダメージ増加", baseCost: 100, stat: 'bulletDmg', step: 10 },
+            FIRE_RATE: { name: "連射速度アップ", type: "stat", desc: "連射速度向上", baseCost: 150, stat: 'fireRate', step: -0.5, min: 2 },
+            MOVE_SPEED: { name: "移動速度アップ", type: "stat", desc: "移動速度向上", baseCost: 100, stat: 'moveSpeed', step: 0.5 },
+            MAX_LIFE: { name: "最大ライフアップ", type: "stat", desc: "最大ライフ+1", baseCost: 200, stat: 'maxLives', step: 1 },
+            HEAL_CURRENT: { name: "ライフ回復", type: "heal", desc: "現在のライフを1回復 (Maxまで)", baseCost: 100, stat: 'lives', step: 1 }
+        };
 
-        // Enemyクラス
-        class Enemy {
-            constructor(x, y, w, h, color, hp, scoreValue) {
-                this.x = x;
-                this.y = y;
-                this.width = w;
-                this.height = h;
-                this.color = color;
-                this.maxHP = hp;
-                this.hp = hp;
-                this.scoreValue = scoreValue;
-                this.isAlive = true;
-                this.moveDir = 1;
-                this.dropStep = 5;
-                this.speed = 1;
-                this.lastShot = 0;
-                this.shotInterval = 1500;
+        // --- オブジェクトクラス ---
+
+        // プレイヤー 
+        class Player {
+            constructor() {
+                this.width = 20; 
+                this.height = 20;
+                this.x = WIDTH / 2 - this.width / 2;
+                this.y = HEIGHT - this.height - 10;
+                this.color = 'cyan';
+                this.hitRadius = 3; 
+                this.currentLife = stats.lives;
             }
 
             update() {
-                if (!this.isAlive) return;
+                if (isDragging) return; 
 
-                this.x += this.moveDir * this.speed;
+                const isSlow = keys['Shift'] || keys['z']; 
+                let currentSpeed = stats.moveSpeed;
+                if (isSlow) currentSpeed = stats.moveSpeed * 0.8 / 4.5 * 0.8; // BASE_MOVE_SPEED時のslowSpeed (0.8)を基準に調整
 
-                // 画面端判定
-                if (this.x + this.width > WIDTH || this.x < 0) {
-                    this.moveDir *= -1;
-                    this.y += this.dropStep;
-                }
+                if (keys['ArrowLeft'] || keys['a']) this.x -= currentSpeed;
+                if (keys['ArrowRight'] || keys['d']) this.x += currentSpeed;
+                if (keys['ArrowUp'] || keys['w']) this.y -= currentSpeed; 
+                if (keys['ArrowDown'] || keys['s']) this.y += currentSpeed; 
 
-                // 攻撃
-                if (Date.now() - this.lastShot > this.shotInterval && Math.random() < 0.02) {
-                    this.shoot();
-                    this.lastShot = Date.now();
-                }
-
-                // プレイヤーに到達したらゲームオーバー
-                if (this.y + this.height > player.y) {
-                    isGameOver = true;
-                    homeButton.style.display = 'block'; // ホームボタン表示
+                // 画面外に出ないように制限
+                this.x = Math.max(0, Math.min(this.x, WIDTH - this.width));
+                this.y = Math.max(0, Math.min(this.y, HEIGHT - this.height));
+                
+                // 低速移動時のトレイルを更新
+                if (isSlow) {
+                    trail.push({ x: this.getCenter().x, y: this.getCenter().y });
+                    if (trail.length > TRAIL_LENGTH) {
+                        trail.shift();
+                    }
+                } else {
+                    trail.length = 0;
                 }
             }
-
-            shoot() {
-                // プレイヤーに向かって弾を発射 (ここでは単純な垂直弾)
-                enemyBullets.push(new EnemyBullet(
-                    this.x + this.width / 2, 
-                    this.y + this.height, 
-                    5, 10, 'red', 5)
-                );
+            
+            // ダメージ処理
+            takeDamage() {
+                this.currentLife--;
+                stats.lives = this.currentLife;
+                if (this.currentLife <= 0) {
+                    gameOver();
+                } else {
+                    // 一時無敵処理など
+                }
             }
 
             draw() {
-                if (!this.isAlive) return;
-                ctx.fillStyle = this.color;
-                ctx.fillRect(this.x, this.y, this.width, this.height);
+                const isSlow = keys['Shift'] || keys['z'];
+                const center = this.getCenter();
+
+                // 1. 低速移動トレイル
+                if (isSlow && trail.length > 1) {
+                    ctx.beginPath();
+                    ctx.moveTo(trail[0].x, trail[0].y);
+                    for (let i = 1; i < trail.length; i++) {
+                        ctx.strokeStyle = `rgba(118, 255, 3, ${i / TRAIL_LENGTH * 0.5})`; 
+                        ctx.lineWidth = 1;
+                        ctx.lineTo(trail[i].x, trail[i].y);
+                        ctx.stroke();
+                    }
+                }
                 
-                // HP表示 (簡略化)
-                ctx.fillStyle = 'white';
-                ctx.font = '10px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText(this.hp, this.x + this.width / 2, this.y - 5);
+                // 2. プレイヤー本体（三角形）
+                ctx.fillStyle = isSlow ? '#B2FF59' : this.color; 
+                ctx.beginPath();
+                ctx.moveTo(this.x + this.width / 2, this.y);
+                ctx.lineTo(this.x, this.y + this.height);
+                ctx.lineTo(this.x + this.width, this.y + this.height);
+                ctx.closePath();
+                ctx.fill();
+
+                if (isSlow) {
+                    ctx.strokeStyle = '#76FF03';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+
+                // 3. 当たり判定（黄色い点）
+                ctx.fillStyle = isSlow ? 'yellow' : 'red';
+                ctx.beginPath();
+                ctx.arc(center.x, center.y, this.hitRadius + 1, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            getCenter() {
+                return { x: this.x + this.width / 2, y: this.y + this.height / 2, radius: this.hitRadius };
             }
         }
 
-        // Bulletクラス
-        class Bullet {
-            constructor(x, y, w, h, color, damage, speed) {
+        // 自機弾
+        class PlayerBullet {
+            constructor(x, y) {
                 this.x = x;
                 this.y = y;
-                this.width = w;
-                this.height = h;
-                this.color = color;
-                this.damage = damage;
-                this.speed = speed;
-                this.isAlive = true;
+                this.radius = 3;
+                this.speed = 10;
+                this.damage = stats.bulletDmg;
+                this.color = 'yellow';
             }
 
             update() {
                 this.y -= this.speed;
-                if (this.y < 0) {
-                    this.isAlive = false;
+                return this.y < 0; 
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        // 敵
+        class Enemy {
+            constructor(initialHP) {
+                this.width = 40;
+                this.height = 40;
+                this.x = WIDTH / 2 - this.width / 2;
+                this.y = 50; 
+                this.color = 'red';
+                this.maxHealth = initialHP;
+                this.health = initialHP;
+                this.fireTimer = 0;
+                this.firePattern = 0; 
+            }
+
+            update() {
+                // 敵の移動 (Waveが進むと少し動くように)
+                this.x = WIDTH / 2 + Math.sin(gameFrame * 0.01) * 50 * (currentWave < 5 ? 0 : 1);
+                this.x = Math.max(0, Math.min(this.x, WIDTH - this.width));
+
+                this.fireTimer++;
+                
+                // 弾幕パターン切り替え (例: 150フレームごと)
+                if (this.fireTimer > 150 + Math.random() * 50) {
+                    this.fireTimer = 0;
+                    // Waveに応じて新しいパターンを決定
+                    this.firePattern = Math.floor(Math.random() * (currentWave < 3 ? 3 : currentWave < 8 ? 5 : 7)); 
+                    this.shoot();
+                }
+
+                return this.health <= 0; 
+            }
+
+            shoot() {
+                let center = this.getCenter();
+                let speed = 2 + (currentWave / 10);
+                let num, angleStep, startAngle;
+
+                switch (this.firePattern) {
+                    case 0: // 基本の5方向拡散弾
+                        num = 5;
+                        angleStep = Math.PI * 0.25; 
+                        startAngle = Math.PI / 2 - angleStep * (num - 1) / 2;
+                        for (let i = 0; i < num; i++) {
+                            let angle = startAngle + i * angleStep;
+                            let dx = Math.cos(angle) * speed;
+                            let dy = Math.sin(angle) * speed;
+                            enemyBullets.push(new EnemyBullet(center.x, center.y, dy, 'red', dx, 5));
+                        }
+                        break;
+                    case 1: // 時計回り螺旋弾
+                        num = 8;
+                        angleStep = Math.PI * 2 / num;
+                        for (let i = 0; i < num; i++) {
+                            let angle = i * angleStep + gameFrame * 0.05;
+                            let dx = Math.cos(angle) * speed * 0.8;
+                            let dy = Math.sin(angle) * speed * 0.8;
+                            enemyBullets.push(new EnemyBullet(center.x, center.y, dy, 'purple', dx, 3));
+                        }
+                        break;
+                    case 2: // 10秒間追尾弾 (プレイヤーターゲット)
+                        if (currentWave >= 2) {
+                             // プレイヤーへの角度を計算
+                            let angle = Math.atan2(player.getCenter().y - center.y, player.getCenter().x - center.x);
+                            let dx = Math.cos(angle) * speed * 1.5;
+                            let dy = Math.sin(angle) * speed * 1.5;
+                            enemyBullets.push(new EnemyBullet(center.x, center.y, dy, 'lime', dx, 6, 600)); // 600フレーム追尾
+                        }
+                        break;
+                    case 3: // 放射状ウェーブ弾
+                        num = 12 + currentWave;
+                        for (let i = 0; i < num; i++) {
+                            let angle = (i * (360 / num) + gameFrame * 0.5) * (Math.PI / 180);
+                            let dx = Math.cos(angle) * speed * 0.7;
+                            let dy = Math.sin(angle) * speed * 0.7;
+                            enemyBullets.push(new EnemyBullet(center.x, center.y, dy, 'yellow', dx, 4));
+                        }
+                        break;
+                    case 4: // ランダムな方向への高速弾
+                        num = 6;
+                        for (let i = 0; i < num; i++) {
+                            let angle = Math.random() * Math.PI * 2;
+                            let s = speed * (1.5 + Math.random() * 0.5);
+                            let dx = Math.cos(angle) * s;
+                            let dy = Math.sin(angle) * s;
+                            enemyBullets.push(new EnemyBullet(center.x, center.y, dy, 'orange', dx, 3));
+                        }
+                        break;
+                    case 5: // (ボス弾幕) 扇状の自弾発射弾 (未実装: 単純な広範囲弾で代用)
+                    case 6: // (ボス弾幕) 複数方向からのレーザー
+                        if (currentWave >= 5) {
+                            num = 20;
+                            let angleOffset = (gameFrame * 0.05);
+                            for (let i = 0; i < num; i++) {
+                                let angle = (i * (360 / num) + angleOffset) * (Math.PI / 180);
+                                let s = speed * 0.5;
+                                let dx = Math.cos(angle) * s;
+                                let dy = Math.sin(angle) * s;
+                                enemyBullets.push(new EnemyBullet(center.x, center.y, dy, 'red', dx, 3));
+                                enemyBullets.push(new EnemyBullet(center.x, center.y, -dy, -dy > 0 ? 'blue' : 'blue', dx, 3));
+                            }
+                        }
+                        break;
                 }
             }
 
             draw() {
                 ctx.fillStyle = this.color;
                 ctx.fillRect(this.x, this.y, this.width, this.height);
+                
+                // HPゲージの描画
+                this.drawHealthBar();
+            }
+            
+            drawHealthBar() {
+                const barWidth = WIDTH - 40;
+                const barHeight = 10;
+                const barX = 20;
+                const barY = 15;
+                const hpRatio = this.health / this.maxHealth;
+
+                // 背景
+                ctx.fillStyle = '#444';
+                ctx.fillRect(barX, barY, barWidth, barHeight);
+
+                // HPバー
+                ctx.fillStyle = '#FF4136'; // 赤
+                ctx.fillRect(barX, barY, barWidth * hpRatio, barHeight);
+                
+                // 枠
+                ctx.strokeStyle = 'white';
+                ctx.strokeRect(barX, barY, barWidth, barHeight);
+                
+                ctx.fillStyle = 'white';
+                ctx.font = '10px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(`BOSS HP: ${Math.max(0, this.health)} / ${this.maxHealth}`, WIDTH / 2, barY + barHeight + 10);
+                
+            }
+
+            getCenter() {
+                return { x: this.x + this.width / 2, y: this.y + this.height / 2, radius: this.width / 2 };
             }
         }
 
-        // EnemyBulletクラス
-        class EnemyBullet extends Bullet {
+        // 敵弾
+        class EnemyBullet {
+            constructor(x, y, dy, color = 'red', dx = 0, radius = 5, followDuration = 0) {
+                this.x = x;
+                this.y = y;
+                this.radius = radius;
+                this.baseDx = dx;
+                this.baseDy = dy;
+                this.color = color;
+                this.followDuration = followDuration; // 追尾フレーム数
+                this.frames = 0;
+            }
+
             update() {
-                this.y += this.speed;
-                if (this.y > HEIGHT) {
-                    this.isAlive = false;
+                this.frames++;
+                
+                let dx = this.baseDx;
+                let dy = this.baseDy;
+
+                // スローフィールド効果
+                if (skillEffects.slowField > 0) {
+                    dx *= 0.5;
+                    dy *= 0.5;
                 }
-            }
-        }
-        
-        // --- 描画関数 ---
 
-        function drawPlayer() {
-            if (isGameOver) return;
-            // プレイヤー本体
-            ctx.fillStyle = player.color;
-            if (player.invincible && Date.now() % 200 < 100) {
-                ctx.fillStyle = 'gray'; // 点滅
-            }
-            ctx.fillRect(player.x, player.y, player.width, player.height);
+                // 追尾弾処理
+                if (this.frames < this.followDuration) {
+                    let target = player.getCenter();
+                    let angle = Math.atan2(target.y - this.y, target.x - this.x);
+                    let speed = Math.sqrt(this.baseDx * this.baseDx + this.baseDy * this.baseDy);
+                    
+                    dx = Math.cos(angle) * speed;
+                    dy = Math.sin(angle) * speed;
+                }
 
-            // ヒットボックスの表示 (Shiftキーが押されているとき)
-            if (keys['Shift']) {
+                this.y += dy;
+                this.x += dx; 
+
+                return this.y > HEIGHT || this.y < 0 || this.x < 0 || this.x > WIDTH;
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
                 ctx.beginPath();
-                ctx.arc(player.getCenter().x, player.getCenter().y, player.hitboxRadius, 0, Math.PI * 2);
-                ctx.fillStyle = 'yellow';
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
                 ctx.fill();
             }
         }
         
-        function drawHUD() {
-            ctx.fillStyle = 'white';
-            ctx.font = '16px Arial';
-            ctx.textAlign = 'left';
-            ctx.fillText('SCORE: ' + score, 10, 20);
-            ctx.textAlign = 'right';
-            ctx.fillText('HP: ' + player.hp + '/' + player.maxHP, WIDTH - 10, 20);
+        // アイテム (GOLD)
+        class Item {
+            constructor(x, y, value) {
+                this.x = x;
+                this.y = y;
+                this.value = value;
+                this.radius = 5;
+                this.color = 'gold';
+            }
+            
+            update() {
+                this.y += 1; // 常に下に落ちる
+                
+                // マグネット効果
+                if (skillEffects.magnet > 0) {
+                    let playerCenter = player.getCenter();
+                    let dist = Math.sqrt(Math.pow(playerCenter.x - this.x, 2) + Math.pow(playerCenter.y - this.y, 2));
+                    
+                    if (dist < 200) { // 磁力範囲
+                        let angle = Math.atan2(playerCenter.y - this.y, playerCenter.x - this.x);
+                        this.x += Math.cos(angle) * 5;
+                        this.y += Math.sin(angle) * 5;
+                    }
+                }
+
+                return this.y > HEIGHT; // 画面外に出たら消滅
+            }
+            
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = 'darkorange';
+                ctx.stroke();
+            }
         }
 
-        function drawGameOver() {
+
+        // --- ゲーム管理関数 ---
+
+        function startGame() {
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('shop-container').style.display = 'none';
+            gameStatus = 'playing';
+            initGame(1);
+        }
+
+        function initGame(wave) {
+            currentWave = wave;
+            
+            // 敵の初期化 (HPはWaveごとに指数関数的に増加)
+            const baseHP = 100;
+            const hpMultiplier = 1.5;
+            let initialHP = Math.floor(baseHP * Math.pow(hpMultiplier, currentWave - 1));
+            if (currentWave % 5 === 0) { // ボスWave
+                initialHP *= 2; 
+            }
+            
+            enemy = new Enemy(initialHP);
+            player = new Player();
+            player.currentLife = stats.lives; 
+            
+            playerBullets = [];
+            enemyBullets = [];
+            items = [];
+            gameFrame = 0;
+            
+            updateDisplay();
+            if (gameStatus === 'playing') {
+                gameLoop();
+            }
+        }
+        
+        function startNextWave() {
+            // Waveクリアボーナス
+            let bonusGold = 200 + currentWave * 50;
+            stats.gold += bonusGold;
+            
+            // ショップへ移行
+            gameStatus = 'shop';
+            showShop();
+        }
+
+        function checkCollisions() {
+            // 1. 自機弾 vs 敵
+            playerBullets = playerBullets.filter(bullet => {
+                const dist = Math.sqrt(Math.pow(bullet.x - enemy.getCenter().x, 2) + Math.pow(bullet.y - enemy.getCenter().y, 2));
+                if (dist < bullet.radius + enemy.width / 2) {
+                    enemy.health -= bullet.damage; 
+                    stats.score += 5; 
+                    
+                    if (enemy.health <= 0) {
+                        stats.score += 500;
+                        // 敵撃破
+                        startNextWave();
+                    }
+                    return false; // 弾は消える
+                }
+                return !bullet.update();
+            });
+
+            // 2. 敵弾 vs プレイヤー
+            enemyBullets = enemyBullets.filter(bullet => {
+                const playerCenter = player.getCenter();
+                const dist = Math.sqrt(Math.pow(bullet.x - playerCenter.x, 2) + Math.pow(bullet.y - playerCenter.y, 2));
+                
+                if (dist < bullet.radius + playerCenter.radius) {
+                    player.takeDamage();
+                    updateDisplay();
+                    return false; // 弾は消える
+                }
+                return !bullet.update(); 
+            });
+            
+            // 3. プレイヤー vs アイテム
+            items = items.filter(item => {
+                const playerCenter = player.getCenter();
+                const dist = Math.sqrt(Math.pow(item.x - playerCenter.x, 2) + Math.pow(item.y - playerCenter.y, 2));
+                
+                if (dist < item.radius + playerCenter.radius + 10) { // 取得判定を少し大きく
+                    stats.gold += item.value;
+                    updateDisplay();
+                    return false; 
+                }
+                return !item.update();
+            });
+        }
+        
+        // 弾の発射制御
+        function playerShoot() {
+            const currentFireRate = stats.fireRate;
+            let actualFireRate = currentFireRate;
+            
+            // フルバーストスキル効果
+            if (skillEffects.fullBurst > 0) {
+                actualFireRate = Math.max(2, currentFireRate / (1 + skillData.FULL_BURST.level * 0.5)); 
+            }
+
+            if (keys[' '] || keys['x']) {
+                if (gameFrame % Math.floor(actualFireRate) === 0) {
+                    playerBullets.push(new PlayerBullet(player.x + player.width / 2, player.y));
+                }
+            }
+        }
+        
+        // スキル発動処理
+        function activateSkill(skillId) {
+            const skill = skillData[skillId];
+            if (skill.currentCd > 0) return;
+            
+            skill.currentCd = skill.cd * (1 - skill.level * 0.05); // レベルアップでクールダウン短縮
+            
+            switch(skillId) {
+                case 'HEAL':
+                    player.currentLife = Math.min(stats.maxLives, player.currentLife + 1 + Math.floor(skill.level / 2));
+                    stats.lives = player.currentLife;
+                    updateDisplay();
+                    break;
+                case 'FULL_BURST':
+                    skillEffects.fullBurst = 60 + skill.level * 30; // 1秒 + レベル*0.5秒
+                    break;
+                case 'BOMB':
+                    // 弾消去
+                    enemyBullets = [];
+                    // 敵にダメージ
+                    enemy.health -= 500 + skill.level * 200;
+                    if (enemy.health <= 0) startNextWave();
+                    break;
+                case 'SLOW_FIELD':
+                    skillEffects.slowField = 180 + skill.level * 60; // 3秒 + レベル*1秒
+                    break;
+                case 'MAGNET':
+                    skillEffects.magnet = 600 + skill.level * 120; // 10秒 + レベル*2秒
+                    break;
+                case 'TRACE_LASER':
+                    skillEffects.traceLaser.active = true;
+                    skillEffects.traceLaser.duration = 60; // 1秒持続
+                    skillEffects.traceLaser.x = player.getCenter().x;
+                    skillEffects.traceLaser.y = player.getCenter().y;
+                    break;
+            }
+        }
+        
+        // スキルクールダウン更新
+        function updateSkills() {
+            Object.values(skillData).forEach(skill => {
+                if (skill.currentCd > 0) {
+                    skill.currentCd--;
+                }
+            });
+            
+            Object.keys(skillEffects).forEach(key => {
+                if (typeof skillEffects[key] === 'number' && skillEffects[key] > 0) {
+                    skillEffects[key]--;
+                }
+                // トレースレーザーは個別の更新
+                if (key === 'traceLaser' && skillEffects.traceLaser.active) {
+                    skillEffects.traceLaser.duration--;
+                    // 敵にダメージを与えるロジック
+                    if (gameFrame % 5 === 0) {
+                         enemy.health -= 50 + skillData.TRACE_LASER.level * 20; 
+                         if (enemy.health <= 0) startNextWave();
+                    }
+                    if (skillEffects.traceLaser.duration <= 0) {
+                        skillEffects.traceLaser.active = false;
+                    }
+                }
+            });
+        }
+        
+        function drawHUD() {
+            // プレイヤーHPゲージ
+            const pBarWidth = 150;
+            const pBarHeight = 15;
+            const pBarX = WIDTH - pBarWidth - 10;
+            const pBarY = HEIGHT - pBarHeight - 10;
+            const pRatio = player.currentLife / stats.maxLives;
+
+            ctx.fillStyle = '#444';
+            ctx.fillRect(pBarX, pBarY, pBarWidth, pBarHeight);
+            ctx.fillStyle = '#1E90FF'; // 青
+            ctx.fillRect(pBarX, pBarY, pBarWidth * pRatio, pBarHeight);
+            ctx.strokeStyle = 'white';
+            ctx.strokeRect(pBarX, pBarY, pBarWidth, pBarHeight);
+            
+            ctx.fillStyle = 'white';
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText(`LIFE: ${player.currentLife}/${stats.maxLives}`, pBarX + pBarWidth, pBarY - 5);
+            
+            // スキルクールダウンゲージ
+            equippedSkills.forEach((skillId, index) => {
+                const skill = skillData[skillId];
+                const cdRatio = skill.currentCd / (skill.cd * (1 - skill.level * 0.05));
+                const cdBarWidth = 80;
+                const cdBarHeight = 10;
+                const cdBarX = 10;
+                const cdBarY = HEIGHT - 50 - (index * 20);
+                
+                ctx.fillStyle = '#444';
+                ctx.fillRect(cdBarX, cdBarY, cdBarWidth, cdBarHeight);
+                
+                if (skill.currentCd > 0) {
+                    ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+                    ctx.fillRect(cdBarX, cdBarY, cdBarWidth * cdRatio, cdBarHeight);
+                    ctx.fillStyle = 'white';
+                    ctx.textAlign = 'left';
+                    ctx.fillText(`${skill.key.toUpperCase()} - CD: ${(skill.currentCd / 60).toFixed(1)}s`, cdBarX + cdBarWidth + 5, cdBarY + 9);
+                } else {
+                    ctx.fillStyle = '#76FF03';
+                    ctx.fillRect(cdBarX, cdBarY, cdBarWidth, cdBarHeight);
+                    ctx.fillStyle = 'black';
+                    ctx.textAlign = 'left';
+                    ctx.fillText(`${skill.key.toUpperCase()} - READY`, cdBarX + 5, cdBarY + 9);
+                }
+                
+                ctx.strokeStyle = 'white';
+                ctx.strokeRect(cdBarX, cdBarY, cdBarWidth, cdBarHeight);
+            });
+        }
+        
+        function drawTraceLaser() {
+             if (!skillEffects.traceLaser.active) return;
+             
+             const duration = skillEffects.traceLaser.duration;
+             const center = enemy.getCenter();
+             
+             ctx.save();
+             ctx.beginPath();
+             
+             const alpha = duration > 30 ? 1 : duration / 30; // 終わりに近づくと薄くなる
+             ctx.strokeStyle = `rgba(255, 0, 0, ${alpha})`;
+             ctx.lineWidth = 4 + skillData.TRACE_LASER.level * 2;
+             
+             // レーザーをプレイヤーから敵の中心に向かって描画
+             ctx.moveTo(player.getCenter().x, player.getCenter().y);
+             ctx.lineTo(center.x, center.y);
+             ctx.stroke();
+             
+             ctx.restore();
+        }
+
+
+        function gameOver() {
+            gameStatus = 'gameover';
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
             ctx.fillRect(0, 0, WIDTH, HEIGHT);
-            ctx.fillStyle = 'red';
-            ctx.font = '48px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('GAME OVER', WIDTH / 2, HEIGHT / 2 - 20);
-            ctx.font = '24px Arial';
             ctx.fillStyle = 'white';
-            ctx.fillText('Final Score: ' + score, WIDTH / 2, HEIGHT / 2 + 30);
-            
-            homeButton.style.display = 'block'; // ホームボタン表示
+            ctx.font = '40px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('GAME OVER', WIDTH / 2, HEIGHT / 2 - 30);
+            ctx.font = '24px sans-serif';
+            ctx.fillText(`Reached Wave: ${currentWave}`, WIDTH / 2, HEIGHT / 2 + 20);
+            ctx.fillText(`Final Score: ${stats.score}`, WIDTH / 2, HEIGHT / 2 + 50);
+            ctx.fillText('Press R to Restart (Wave 1)', WIDTH / 2, HEIGHT / 2 + 100);
+        }
+
+        function updateDisplay() {
+            document.getElementById('wave-display').textContent = currentWave;
+            document.getElementById('gold-display').textContent = stats.gold;
+            document.getElementById('lives-display').textContent = `${stats.lives} / ${stats.maxLives}`;
         }
         
-        function draw() {
+        // --- ショップ画面の表示と処理 ---
+        
+        function showShop() {
+            const shopContainer = document.getElementById('shop-container');
+            shopContainer.style.display = 'flex';
+            
+            let html = `<h2>Wave ${currentWave} CLEAR!</h2>`;
+            html += `<p style="font-size: 1.5em; color: gold;">獲得 GOLD: ${200 + currentWave * 50}</p>`;
+            html += `<p style="font-size: 1.2em;">所持 GOLD: <span id="shop-gold-display">${stats.gold}</span></p><hr>`;
+            
+            // 1. 基本アップグレード
+            html += `<div class="shop-panel"><h3>💪 基本能力アップグレード</h3>`;
+            Object.keys(SHOP_ITEMS).forEach(key => {
+                const item = SHOP_ITEMS[key];
+                const currentVal = stats[item.stat] !== undefined ? stats[item.stat] : 'N/A';
+                
+                // コスト計算 (レベルがないので、現在の値に応じてコストを決定)
+                let currentLevel = 0;
+                if (item.stat === 'bulletDmg') currentLevel = (currentVal - BASE_BULLET_DMG) / 10;
+                else if (item.stat === 'fireRate') currentLevel = (BASE_FIRE_RATE - currentVal) / 0.5;
+                else if (item.stat === 'moveSpeed') currentLevel = (currentVal - BASE_MOVE_SPEED) / 0.5;
+                else if (item.stat === 'maxLives') currentLevel = currentVal - BASE_MAX_LIVES;
+                
+                const currentCost = item.baseCost + currentLevel * 50; 
+                const buttonText = item.type === 'heal' ? `回復 ${item.baseCost}G` : `強化 ${currentCost}G`;
+                const isDisabled = stats.gold < currentCost || (item.stat === 'lives' && stats.lives >= stats.maxLives);
+                const nextVal = item.stat === 'fireRate' ? Math.max(item.min || 1, currentVal + item.step) : currentVal + item.step;
+                const detailText = item.type === 'heal' ? item.desc : `現在の値: ${currentVal.toFixed(1)} → Next: ${nextVal.toFixed(1)}`;
+
+                html += `<div class="shop-item">
+                            <div>${item.name} <span style="font-size:0.8em; color:#bbb;">(Lv.${currentLevel})</span></div>
+                            <div class="details">${detailText}</div>
+                            <button onclick="buyUpgrade('${key}', ${currentCost})" ${isDisabled ? 'disabled' : ''}>${buttonText}</button>
+                        </div>`;
+            });
+            html += `</div>`;
+            
+            // 2. スキルアップグレード
+            html += `<div class="shop-panel"><h3>⚡ スキルレベルアップ</h3>`;
+            Object.keys(skillData).forEach(skillId => {
+                const skill = skillData[skillId];
+                const nextLevel = skill.level + 1;
+                const currentCost = skill.cost + skill.level * 100;
+                const isDisabled = stats.gold < currentCost || skill.level >= skill.maxLevel;
+                const buttonText = skill.level >= skill.maxLevel ? "MAX" : `LvUP ${currentCost}G`;
+                
+                const nextCD = (skill.cd * (1 - nextLevel * 0.05) / 60).toFixed(1);
+                const detailText = `Lv.${skill.level} / ${skill.maxLevel} (CD: ${(skill.cd * (1 - skill.level * 0.05) / 60).toFixed(1)}s → ${nextCD}s)`;
+                
+                html += `<div class="shop-item">
+                            <div>${skillId} (${skill.key.toUpperCase()}キー)</div>
+                            <div class="details">${detailText}</div>
+                            <button onclick="buySkillUpgrade('${skillId}', ${currentCost})" ${isDisabled ? 'disabled' : ''}>${buttonText}</button>
+                        </div>`;
+            });
+            html += `</div>`;
+
+            html += `<button onclick="closeShop()" style="padding: 15px 30px; font-size: 1.5em; background: #76FF03; color: black; border: none; border-radius: 5px; margin-top: 20px;">WAVE ${currentWave + 1} へ</button>`;
+            
+            shopContainer.innerHTML = html;
+        }
+
+        function buyUpgrade(itemId, cost) {
+            if (stats.gold < cost) return;
+            
+            const item = SHOP_ITEMS[itemId];
+            
+            if (item.type === 'heal') {
+                if (stats.lives >= stats.maxLives) return;
+                stats.lives = Math.min(stats.maxLives, stats.lives + item.step);
+            } else {
+                if (item.stat === 'fireRate' && stats.fireRate <= item.min) return;
+                stats[item.stat] += item.step;
+                if (item.stat === 'fireRate') stats.fireRate = Math.max(item.min, stats.fireRate);
+            }
+
+            stats.gold -= cost;
+            updateShopDisplay();
+        }
+        
+        function buySkillUpgrade(skillId, cost) {
+            if (stats.gold < cost) return;
+            const skill = skillData[skillId];
+            if (skill.level >= skill.maxLevel) return;
+
+            skill.level++;
+            stats.gold -= cost;
+            updateShopDisplay();
+        }
+        
+        function updateShopDisplay() {
+            document.getElementById('shop-container').innerHTML = ''; // 一度クリア
+            showShop(); // 再描画
+            updateDisplay();
+        }
+
+        function closeShop() {
+            document.getElementById('shop-container').style.display = 'none';
+            gameStatus = 'playing';
+            initGame(currentWave + 1);
+        }
+
+        // --- メインゲームループ ---
+
+        function gameLoop() {
+            if (gameStatus !== 'playing') return;
+            gameFrame++; 
+            ctx.textAlign = 'start';
+
+            playerShoot(); 
+            updateSkills(); 
+
+            player.update();
+            enemy.update();
+            checkCollisions();
+
+            // 描画
+            ctx.clearRect(0, 0, WIDTH, HEIGHT); 
             ctx.fillStyle = '#00001a';
             ctx.fillRect(0, 0, WIDTH, HEIGHT);
-
-            bullets.forEach(b => b.draw());
-            enemyBullets.forEach(b => b.draw());
-            enemies.forEach(e => e.draw());
-            drawPlayer();
-            drawHUD();
-
-            if (isGameOver) {
-                drawGameOver();
-            }
-        }
-
-        // --- 更新関数 ---
-        
-        function updatePlayer() {
-            if (isGameOver) return;
             
-            let currentSpeed = keys['Shift'] ? player.focusSpeed : player.speed;
-
-            if (keys['ArrowLeft'] || keys['a']) player.x -= currentSpeed;
-            if (keys['ArrowRight'] || keys['d']) player.x += currentSpeed;
-            if (keys['ArrowUp'] || keys['w']) player.y -= currentSpeed;
-            if (keys['ArrowDown'] || keys['s']) player.y += currentSpeed;
-
-            // 境界チェック
-            player.x = Math.max(0, Math.min(player.x, WIDTH - player.width));
-            player.y = Math.max(0, Math.min(player.y, HEIGHT - player.height));
-
-            // 射撃処理
-            const currentTime = Date.now();
-            if ((keys['z'] || keys[' ']) && currentTime - player.lastShotTime > player.shootCooldown) {
-                bullets.push(new Bullet(
-                    player.getCenter().x - 2, 
-                    player.y, 
-                    4, 10, 'yellow', 1, 10
-                ));
-                player.lastShotTime = currentTime;
-            }
-
-            // 無敵時間の解除
-            if (player.invincible && currentTime > player.invincibleTime) {
-                player.invincible = false;
-            }
-        }
-
-        function updateCollisions() {
-            // プレイヤー弾 vs 敵
-            for(let i = bullets.length - 1; i >= 0; i--) {
-                const b = bullets[i];
-                for(let j = enemies.length - 1; j >= 0; j--) {
-                    const e = enemies[j];
-                    if (e.isAlive && b.isAlive && checkCollision(b, e)) {
-                        e.hp -= b.damage;
-                        b.isAlive = false;
-                        if (e.hp <= 0) {
-                            e.isAlive = false;
-                            score += e.scoreValue;
-                        }
-                        break;
-                    }
-                }
-            }
-
-            // 敵弾 vs プレイヤー
-            if (!player.invincible) {
-                const playerHitbox = {
-                    x: player.getCenter().x - player.hitboxRadius,
-                    y: player.getCenter().y - player.hitboxRadius,
-                    width: player.hitboxRadius * 2,
-                    height: player.hitboxRadius * 2
-                };
-                
-                for(let i = enemyBullets.length - 1; i >= 0; i--) {
-                    const eb = enemyBullets[i];
-                    if (eb.isAlive && checkCollision(eb, playerHitbox)) {
-                        player.hp -= 1;
-                        eb.isAlive = false;
-                        
-                        if (player.hp <= 0) {
-                            isGameOver = true;
-                            homeButton.style.display = 'block'; // ホームボタン表示
-                        } else {
-                            // ダメージ後の無敵時間設定
-                            player.invincible = true;
-                            player.invincibleTime = Date.now() + 2000; // 2秒間無敵
-                        }
-                        break;
-                    }
-                }
-            }
-        }
-        
-        // 矩形衝突判定
-        function checkCollision(r1, r2) {
-            return r1.x < r2.x + r2.width &&
-                   r1.x + r1.width > r2.x &&
-                   r1.y < r2.y + r2.height &&
-                   r1.y + r1.height > r2.y;
-        }
-
-        function updateGame() {
-            if (isGameOver) return;
-
-            updatePlayer();
+            enemy.draw(); 
+            items.forEach(item => item.draw());
+            player.draw();
+            playerBullets.forEach(bullet => bullet.draw());
+            enemyBullets.forEach(bullet => bullet.draw());
+            drawTraceLaser();
             
-            // 弾と敵の更新
-            bullets.forEach(b => b.update());
-            enemyBullets.forEach(b => b.update());
-            enemies.forEach(e => e.update());
+            drawHUD(); // プレイヤーHPとスキルCDを描画
 
-            // 弾と敵の除去
-            bullets = bullets.filter(b => b.isAlive);
-            enemyBullets = enemyBullets.filter(b => b.isAlive);
-            
-            // 敵をフィルタリングする前に衝突判定を行う
-            updateCollisions();
-
-            enemies = enemies.filter(e => e.isAlive);
-            
-            // ステージクリア判定 (簡略化)
-            if (enemies.length === 0) {
-                // ... (次のステージの敵を生成するロジックをここに)
-                for(let i = 0; i < 5; i++) {
-                    enemies.push(new Enemy(50 + i * 80, 50, 40, 40, 'red', 10, 100));
-                }
-            }
+            requestAnimationFrame(gameLoop);
         }
-        
-        // --- ゲームループ ---
-        function gameLoop(currentTime) {
-            // FPS制御 (今回は簡略化し、requestAnimationFrameに任せる)
-            
-            updateGame();
-            draw();
 
-            if (!isGameOver) {
-                gameLoopId = requestAnimationFrame(gameLoop);
-            }
-        }
-        
         // --- イベントリスナー ---
-        document.addEventListener('keydown', (e) => {
+        
+        window.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
             const key = e.key.toLowerCase();
-            keys[key] = true;
-            if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'z', 'shift'].includes(key)) {
-                e.preventDefault();
+            
+            // スキル発動キー
+            if (gameStatus === 'playing') {
+                if (key === 'j') activateSkill(equippedSkills[0]);
+                else if (key === 'k') activateSkill(equippedSkills[1]);
+                else if (key === 'l') activateSkill(equippedSkills[2]);
             }
-            if (key === 'r' && isGameOver) {
-                initGame();
+
+            // WASD/移動/低速キーのデフォルト動作を防ぐ
+            if (key === 'w' || key === 'a' || key === 's' || key === 'd' || key === 'shift' || key === 'z' || key === ' ' || key.includes('arrow')) {
+                e.preventDefault(); 
+            }
+
+            if (gameStatus === 'gameover' && key === 'r') {
+                // Rキーでリスタート時の状態をリセット
+                stats = {
+                    gold: 0,
+                    lives: BASE_MAX_LIVES,
+                    maxLives: BASE_MAX_LIVES,
+                    bulletDmg: BASE_BULLET_DMG,
+                    fireRate: BASE_FIRE_RATE,
+                    moveSpeed: BASE_MOVE_SPEED,
+                };
+                Object.keys(skillData).forEach(id => {
+                    skillData[id].level = 0;
+                    skillData[id].currentCd = 0;
+                });
+                
+                document.getElementById('start-screen').style.display = 'flex';
+                gameStatus = 'init';
+                return;
             }
         });
-        document.addEventListener('keyup', (e) => {
-            keys[e.key.toLowerCase()] = false;
+
+        window.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
         });
-
-
-        // タッチ操作関連 (元のコードより)
-        let isDragging = false;
-        let dragOffsetX = 0;
-        let dragOffsetY = 0;
-
+        
+        // --- ドラッグ/タッチ操作 (省略、前回と同様) ---
         function getCanvasMousePosition(event) {
             const rect = canvas.getBoundingClientRect();
-            let clientX, clientY;
-            if (event.touches) {
-                clientX = event.touches[0].clientX;
-                clientY = event.touches[0].clientY;
-            } else {
-                clientX = event.clientX;
-                clientY = event.clientY;
-            }
-            return {
-                x: clientX - rect.left,
-                y: clientY - rect.top
-            };
+            const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+            const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+            
+            const x = (clientX - rect.left) * (canvas.width / rect.width);
+            const y = (clientY - rect.top) * (canvas.height / rect.height);
+            return { x, y };
         }
 
         function handleDragStart(event) {
-            if (isGameOver) return;
+            if (gameStatus !== 'playing') return;
             const pos = getCanvasMousePosition(event);
             
             dragOffsetX = pos.x - player.getCenter().x;
@@ -471,7 +1004,7 @@
         }
 
         function handleDragMove(event) {
-            if (!isDragging || isGameOver) return;
+            if (!isDragging || gameStatus !== 'playing') return;
             const pos = getCanvasMousePosition(event);
             
             let newX = pos.x - dragOffsetX - player.width / 2;
@@ -498,11 +1031,9 @@
 
         // スマホ/タブレット向けタッチイベント
         canvas.addEventListener('touchstart', handleDragStart);
-        canvas.addEventListener('touchmove', handleDragMove, { passive: false });
+        document.addEventListener('touchmove', handleDragMove, { passive: false });
         document.addEventListener('touchend', handleDragEnd);
 
-        // --- 初期化 ---
-        initGame();
 
     </script>
 </body>
