@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>シンプル・タワーディフェンス (v4.1 - 速度調整 & バグ修正)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        body { 
+            background: #2a2a2a; 
+            color: white; 
+            text-align: center; 
+            font-family: sans-serif; 
+            margin: 0; 
+            padding-top: 20px; 
+        }
+        h1 {
+            color: #76FF03; 
+            margin-bottom: 20px;
+        }
+        #GameArea {
+            max-width: 700px; 
+            margin: 0 auto;
+            padding: 20px;
+            border: 1px solid #444;
+            border-radius: 8px;
+            background: #1e1e1e;
+        }
+        #GameCanvas {
+            background: #004d40; 
+            border: 2px solid #76FF03;
+            display: block;
+            margin: 20px auto;
+            cursor: pointer; 
+            touch-action: none; 
+        }
+        #control-panel {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 10px;
+        }
+        .unit-type-header {
+            width: 100%;
+            text-align: left;
+            margin-top: 5px;
+            margin-bottom: -5px;
+            color: #FFC300;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+        button {
+            padding: 10px 15px;
+            font-size: 1.0em;
+            background-color: #76FF03;
+            color: black;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            flex-grow: 1;
+            min-width: 100px; 
+        }
+        button.active {
+            background-color: #FFC300; 
+        }
+        button:disabled {
+            background-color: #555;
+            color: #aaa;
+            cursor: not-allowed;
+        }
+        #game-info {
+            font-size: 1.2em;
+            margin-bottom: 10px;
+            color: #FFC300;
+        }
+        .status-valid { color: yellow; }
+        .status-invalid { color: red; }
+    </style>
+</head>
+<body>
+    <div id="GameArea">
+        <h1>シンプル・タワーディフェンス (v4.1)</h1>
+        
+        <div id="game-info">
+            WAVE: <span id="wave-display">1</span> | GOLD: <span id="gold-display">400</span> | CORE HP: <span id="core-hp-display">100</span>
+        </div>
+
+        <canvas id="GameCanvas" width="650" height="500"></canvas>
+        
+        <div id="control-panel">
+            <div class="unit-type-header">ゲーム速度</div>
+            <button id="speed-1" onclick="setGameSpeed(1)" class="active">x1</button>
+            <button id="speed-2" onclick="setGameSpeed(2)">x2</button>
+            <button id="speed-3" onclick="setGameSpeed(3)">x3</button>
+            <button id="speed-5" onclick="setGameSpeed(5)">x5</button>
+            <button id="speed-10" onclick="setGameSpeed(10)">x10</button>
+            
+            <div class="unit-type-header">地上ユニット</div>
+            <button id="place-SOLDIER" onclick="setUnitToPlace('SOLDIER')" data-cost="120">ソルジャー (120G)</button>
+            
+            <div class="unit-type-header">タワーユニット</div>
+            <button id="place-CANNON" onclick="setUnitToPlace('CANNON')" data-cost="100">キャノン (100G)</button>
+            <button id="place-SLOW" onclick="setUnitToPlace('SLOW')" data-cost="150">スロウ (150G)</button>
+            <button id="place-ROCKET" onclick="setUnitToPlace('ROCKET')" data-cost="250">ロケット (250G)</button>
+            
+            <button id="start-wave" onclick="startWave()" style="flex-grow: 2;">WAVE開始</button>
+        </div>
+
+        <div id="status-message" class="status-valid">準備完了。タワーやソルジャーを配置してWAVE開始！</div>
+    </div>
+    
+    <script>
+        const canvas = document.getElementById('GameCanvas');
+        const ctx = canvas.getContext('2d');
+        const WIDTH = canvas.width; 
+        const HEIGHT = canvas.height; 
+
+        // --- ゲーム定数と変数 ---
+        let gameStatus = 'preparation'; 
+        let currentWave = 1;
+        let stats = {
+            gold: 400, 
+            coreHp: 100,
+            maxCoreHp: 100
+        };
+
+        let towers = [];
+        let groundUnits = []; 
+        let enemies = [];
+        let bullets = [];
+        let unitToPlace = null; 
+        let previewPos = { x: 0, y: 0 }; 
+        let gameFrame = 0;
+        let enemySpawnCount = 0;
+        let gameSpeedMultiplier = 1; 
+
+        // ユニットのコストとステータスを定義
+        const TOWER_COST = { CANNON: 100, SLOW: 150, ROCKET: 250, SOLDIER: 120 };
+
+        const TOWER_STATS = {
+             CANNON: { type: 'TOWER', radius: 15, range: 120, fireRate: 45, damage: 20, color: 'yellow' },
+             SLOW:   { type: 'TOWER', radius: 15, range: 100, fireRate: 30, damage: 5, color: 'cyan', slowFactor: 0.5 },
+             ROCKET: { type: 'TOWER', radius: 15, range: 180, fireRate: 75, damage: 40, color: 'orange' },
+             SOLDIER: { type: 'GROUND', width: 20, height: 20, range: 60, fireRate: 60, damage: 15, color: 'white', speed: 1.5, baseSpeed: 1.5, health: 100, maxHealth: 100 }
+        };
+
+        // 敵のルート
+        const ENEMY_PATH = [
+            { x: WIDTH / 2, y: 0 },
+            { x: WIDTH / 2, y: 150 },
+            { x: WIDTH / 2 + 175, y: 150 }, 
+            { x: WIDTH / 2 + 175, y: 350 }, 
+            { x: WIDTH / 2 - 175, y: 350 }, 
+            { x: WIDTH / 2 - 175, y: HEIGHT } 
+        ];
+        const ENEMY_PATH_LINEWIDTH = 50; 
+
+        // --- ユーティリティ関数（変更なし） ---
+        function getCanvasMousePosition(event) {
+            const rect = canvas.getBoundingClientRect();
+            let clientX, clientY;
+
+            if (event.touches) {
+                clientX = event.touches[0].clientX;
+                clientY = event.touches[0].clientY;
+            } else {
+                clientX = event.clientX;
+                clientY = event.clientY;
+            }
+
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        function isPointOnPath(x, y) {
+            for (let i = 0; i < ENEMY_PATH.length - 1; i++) {
+                const p1 = ENEMY_PATH[i];
+                const p2 = ENEMY_PATH[i + 1];
+
+                if (Math.abs(p1.x - p2.x) < 1) {
+                    const min_y = Math.min(p1.y, p2.y);
+                    const max_y = Math.max(p1.y, p2.y);
+                    if (y >= min_y && y <= max_y && Math.abs(x - p1.x) <= ENEMY_PATH_LINEWIDTH / 2) {
+                        return true;
+                    }
+                }
+                else if (Math.abs(p1.y - p2.y) < 1) {
+                    const min_x = Math.min(p1.x, p2.x);
+                    const max_x = Math.max(p1.x, p2.x);
+                     if (x >= min_x && x <= max_x && Math.abs(y - p1.y) <= ENEMY_PATH_LINEWIDTH / 2) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function setGameSpeed(speed) {
+            gameSpeedMultiplier = speed;
+            
+            document.querySelectorAll('#control-panel button[id^="speed-"]').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.getElementById(`speed-${speed}`).classList.add('active');
+        }
+
+        // --- クラス定義：敵ユニット ---
+
+        class Enemy {
+            constructor(wave) {
+                this.width = 20; this.height = 20;
+                this.x = ENEMY_PATH[0].x - this.width / 2; this.y = ENEMY_PATH[0].y;
+                this.baseHealth = 40 + wave * 8; 
+                this.health = this.baseHealth; this.maxHealth = this.baseHealth;
+                this.baseSpeed = 1 + wave * 0.1;
+                this.currentSpeed = this.baseSpeed;
+                this.color = 'red'; this.pathIndex = 1; this.slowTimer = 0; 
+            }
+            update() {
+                if (this.slowTimer > 0) {
+                    this.slowTimer--;
+                    this.currentSpeed = this.baseSpeed * TOWER_STATS.SLOW.slowFactor;
+                } else {
+                    this.currentSpeed = this.baseSpeed;
+                }
+
+                const targetPoint = ENEMY_PATH[this.pathIndex];
+                const dx = targetPoint.x - this.getCenter().x;
+                const dy = targetPoint.y - this.getCenter().y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist < this.currentSpeed) {
+                    this.x = targetPoint.x - this.width / 2;
+                    this.y = targetPoint.y - this.height / 2;
+                    this.pathIndex++;
+
+                    if (this.pathIndex >= ENEMY_PATH.length) {
+                        stats.coreHp -= 10; 
+                        if (stats.coreHp <= 0) gameOver();
+                        updateDisplay();
+                        return true; // コア到達
+                    }
+                } else {
+                    const angle = Math.atan2(dy, dx);
+                    this.x += Math.cos(angle) * this.currentSpeed;
+                    this.y += Math.sin(angle) * this.currentSpeed;
+                }
+                return false; // コア未到達
+            }
+            draw() {
+                const barWidth = this.width; const barHeight = 3;
+                const hpRatio = this.health / this.maxHealth;
+                ctx.fillStyle = 'black'; ctx.fillRect(this.x, this.y - barHeight - 2, barWidth, barHeight);
+                ctx.fillStyle = hpRatio > 0.5 ? 'lime' : hpRatio > 0.2 ? 'yellow' : 'red';
+                ctx.fillRect(this.x, this.y - barHeight - 2, barWidth * hpRatio, barHeight);
+                ctx.fillStyle = this.slowTimer > 0 ? 'blue' : this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+            getCenter() {
+                return { x: this.x + this.width / 2, y: this.y + this.height / 2 };
+            }
+        }
+
+        // --- クラス定義：タワーユニット (FIX: getCenter()を追加) ---
+
+        class Tower {
+            constructor(x, y, type) {
+                this.x = x; this.y = y; this.type = type; // x, y は中心座標
+                const stats = TOWER_STATS[type];
+                this.radius = stats.radius; this.range = stats.range; this.fireRate = stats.fireRate;
+                this.damage = stats.damage; this.color = stats.color;
+                this.fireTimer = 0; this.isTower = true;
+            }
+            getHitboxRadius() { return this.radius * 1.5; }
+            
+            // 🐛 FIX: ユニット配置時の衝突判定のためにgetCenter()を追加
+            getCenter() {
+                return { x: this.x, y: this.y };
+            }
+            
+            findTarget() {
+                let targetEnemy = null; let criteriaValue = this.type === 'ROCKET' ? 0 : this.range * this.range;
+                enemies.forEach(enemy => {
+                    const center = enemy.getCenter();
+                    const dx = center.x - this.x; const dy = center.y - this.y;
+                    const distSq = dx * dx + dy * dy;
+                    if (distSq < this.range * this.range) {
+                        if (this.type === 'ROCKET') {
+                            if (enemy.health > criteriaValue) { criteriaValue = enemy.health; targetEnemy = enemy; }
+                        } else {
+                            if (distSq < criteriaValue) { criteriaValue = distSq; targetEnemy = enemy; }
+                        }
+                    }
+                });
+                return targetEnemy;
+            }
+            update() {
+                this.fireTimer++;
+                const target = this.findTarget();
+                if (target) {
+                    if (this.type === 'SLOW') {
+                        if (this.fireTimer >= this.fireRate) {
+                            this.fireTimer = 0;
+                            enemies.forEach(enemy => {
+                                const center = enemy.getCenter();
+                                const distSq = Math.pow(center.x - this.x, 2) + Math.pow(center.y - this.y, 2);
+                                if (distSq < this.range * this.range) {
+                                    enemy.slowTimer = 60; 
+                                    enemy.health -= this.damage; 
+                                    if (enemy.health <= 0) { stats.gold += 10; updateDisplay(); }
+                                }
+                            });
+                        }
+                    } else if (this.fireTimer >= this.fireRate) {
+                        this.fireTimer = 0;
+                        bullets.push(new Bullet(this.x, this.y, target, this.damage, this.type));
+                    }
+                }
+            }
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2); ctx.fill();
+                if (this.type === 'ROCKET') {
+                    ctx.fillStyle = 'red';
+                    ctx.fillRect(this.x - 5, this.y - 1, 10, 2); ctx.fillRect(this.x - 1, this.y - 5, 2, 10);
+                }
+            }
+            drawRange(isValid) {
+                ctx.beginPath(); ctx.arc(this.x, this.y, this.range, 0, Math.PI * 2);
+                ctx.fillStyle = isValid ? 'rgba(118, 255, 3, 0.1)' : 'rgba(255, 0, 0, 0.1)'; ctx.fill();
+                ctx.strokeStyle = isValid ? 'rgba(118, 255, 3, 0.5)' : 'rgba(255, 0, 0, 0.5)'; ctx.stroke();
+                this.draw(); 
+            }
+        }
+
+        // --- クラス定義：地上ユニット ---
+
+        class GroundUnit {
+            constructor(x, y) {
+                const stats = TOWER_STATS.SOLDIER;
+                this.x = x; this.y = y; this.width = stats.width; this.height = stats.height; // x, y は左上座標
+                this.health = stats.health; this.maxHealth = stats.maxHealth;
+                this.range = stats.range; this.damage = stats.damage; this.fireRate = stats.fireRate;
+                this.color = stats.color; this.speed = stats.speed; 
+                this.fireTimer = 0; this.pathIndex = 1; this.isTower = false;
+            }
+            getHitboxRadius() { return Math.max(this.width, this.height) / 2 * 1.5; }
+            getCenter() { return { x: this.x + this.width / 2, y: this.y + this.height / 2 }; }
+            findTarget() {
+                let closestEnemy = null; let minDistance = this.range * this.range;
+                enemies.forEach(enemy => {
+                    const center = enemy.getCenter();
+                    const dx = center.x - this.getCenter().x; const dy = center.y - this.getCenter().y;
+                    const distSq = dx * dx + dy * dy;
+                    if (distSq < minDistance) { minDistance = distSq; closestEnemy = enemy; }
+                });
+                return closestEnemy;
+            }
+            moveAlongPath() {
+                const center = this.getCenter();
+                const targetPoint = ENEMY_PATH[this.pathIndex];
+                if (this.pathIndex < ENEMY_PATH.length) { 
+                    const dx = targetPoint.x - center.x; const dy = targetPoint.y - center.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist < this.speed) {
+                        this.x = targetPoint.x - this.width / 2; this.y = targetPoint.y - this.height / 2;
+                        this.pathIndex = Math.min(this.pathIndex + 1, ENEMY_PATH.length - 1); 
+                    } else {
+                        const angle = Math.atan2(dy, dx);
+                        this.x += Math.cos(angle) * this.speed; this.y += Math.sin(angle) * this.speed;
+                    }
+                }
+            }
+            update() {
+                this.moveAlongPath();
+                this.fireTimer++;
+                const target = this.findTarget();
+                if (target && this.fireTimer >= this.fireRate) {
+                    this.fireTimer = 0;
+                    target.health -= this.damage;
+                    if (target.health <= 0) { stats.gold += 10; updateDisplay(); }
+                }
+                return this.health <= 0; 
+            }
+            draw() {
+                const barWidth = this.width; const barHeight = 3;
+                const hpRatio = this.health / this.maxHealth;
+                ctx.fillStyle = 'black'; ctx.fillRect(this.x, this.y - barHeight - 2, barWidth, barHeight);
+                ctx.fillStyle = hpRatio > 0.5 ? 'white' : hpRatio > 0.2 ? 'yellow' : 'red';
+                ctx.fillRect(this.x, this.y - barHeight - 2, barWidth * hpRatio, barHeight);
+                ctx.fillStyle = this.color; ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+            drawRange(isValid) {
+                ctx.fillStyle = isValid ? 'rgba(118, 255, 3, 0.5)' : 'rgba(255, 0, 0, 0.5)';
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+        }
+
+        // --- クラス定義：弾丸 (変更なし) ---
+
+        class Bullet {
+            constructor(x, y, target, damage, type) {
+                this.x = x; this.y = y; 
+                this.radius = type === 'ROCKET' ? 6 : 3; 
+                this.speed = type === 'ROCKET' ? 8 : 15; 
+                this.damage = damage; this.target = target;
+                this.color = type === 'ROCKET' ? 'red' : 'white';
+            }
+            update() {
+                if (!this.target || this.target.health <= 0) return true;
+                const targetCenter = this.target.getCenter();
+                const dx = targetCenter.x - this.x; const dy = targetCenter.y - this.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < this.radius + this.target.width / 2 * 0.8) {
+                    this.target.health -= this.damage;
+                    if (this.target.health <= 0) { stats.gold += 10; updateDisplay(); }
+                    return true; 
+                }
+                const angle = Math.atan2(dy, dx);
+                this.x += Math.cos(angle) * this.speed; this.y += Math.sin(angle) * this.speed;
+                return false; 
+            }
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2); ctx.fill();
+            }
+        }
+
+        // --- ゲーム管理関数 ---
+
+        function updateGame() {
+            // 🚀 ゲーム速度倍率に基づいてロジックを更新
+            for (let i = 0; i < gameSpeedMultiplier; i++) {
+                gameFrame++;
+
+                // 1. 敵のアップデートと削除 (コア到達 or HP0で除去)
+                enemies = enemies.filter(enemy => {
+                     const reachedCore = enemy.update(); // update()はコア到達でtrueを返す
+                     return !reachedCore && enemy.health > 0;
+                });
+                
+                // 2. タワーのアップデート
+                towers.forEach(tower => tower.update());
+                
+                // 3. 地上ユニットのアップデートと削除 (HP0で除去)
+                groundUnits = groundUnits.filter(unit => !unit.update()); // unit.update()はHP0でtrueを返す
+
+                // 4. 弾のアップデートと削除
+                bullets = bullets.filter(bullet => !bullet.update());
+
+                if (gameStatus === 'wave') {
+                    handleEnemySpawn();
+                }
+                
+                // 5. WAVEクリア判定
+                if (gameStatus === 'wave' && enemySpawnCount >= getMaxEnemies(currentWave) && enemies.length === 0) {
+                    endWave();
+                    // WAVE終了時に高速ループを中断し、次のフレームで再開
+                    if (gameStatus === 'preparation') break; 
+                }
+            }
+        }
+        
+        function getMaxEnemies(wave) { return 15 + wave * 5; }
+        
+        function handleEnemySpawn() {
+            const maxEnemies = getMaxEnemies(currentWave);
+            const spawnInterval = Math.max(20, 50 - currentWave * 2); 
+
+            if (enemySpawnCount < maxEnemies && gameFrame % spawnInterval === 0) {
+                enemies.push(new Enemy(currentWave));
+                enemySpawnCount++;
+            }
+        }
+        
+        function startWave() {
+            if (gameStatus !== 'preparation') return;
+            gameStatus = 'wave';
+            gameFrame = 0;
+            enemySpawnCount = 0;
+            document.getElementById('start-wave').disabled = true;
+            document.getElementById('status-message').className = 'status-valid';
+            document.getElementById('status-message').textContent = `WAVE ${currentWave} 進行中...`;
+            for (const type in TOWER_COST) {
+                document.getElementById(`place-${type}`).disabled = true;
+            }
+        }
+        
+        function endWave() {
+            gameStatus = 'preparation';
+            currentWave++;
+            stats.gold += 100 + currentWave * 20; 
+            document.getElementById('start-wave').disabled = false;
+            document.getElementById('status-message').className = 'status-valid';
+            document.getElementById('status-message').textContent = `WAVE ${currentWave - 1} クリア! 準備完了。GOLDボーナスを獲得！`;
+            updateDisplay();
+        }
+
+        function gameOver() {
+            gameStatus = 'gameover';
+            document.getElementById('start-wave').disabled = true;
+            for (const type in TOWER_COST) {
+                document.getElementById(`place-${type}`).disabled = true;
+            }
+            document.getElementById('status-message').className = 'status-invalid';
+            document.getElementById('status-message').textContent = `ゲームオーバー！ WAVE ${currentWave} で敗北しました。`;
+        }
+
+        // --- 描画関数、UI/操作関連 ---
+
+        function draw() {
+            ctx.fillStyle = '#004d40'; ctx.fillRect(0, 0, WIDTH, HEIGHT);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; ctx.lineWidth = ENEMY_PATH_LINEWIDTH; 
+            ctx.lineCap = 'round'; ctx.beginPath();
+            ctx.moveTo(ENEMY_PATH[0].x, ENEMY_PATH[0].y);
+            for(let i = 1; i < ENEMY_PATH.length; i++) { ctx.lineTo(ENEMY_PATH[i].x, ENEMY_PATH[i].y); }
+            ctx.stroke();
+
+            ctx.fillStyle = '#8b0000'; ctx.fillRect(0, HEIGHT - 10, WIDTH, 10);
+            
+            towers.forEach(tower => tower.draw());
+            groundUnits.forEach(unit => unit.draw());
+            bullets.forEach(bullet => bullet.draw());
+            enemies.forEach(enemy => enemy.draw());
+            
+            if (unitToPlace) {
+                const isTower = TOWER_STATS[unitToPlace].type === 'TOWER';
+                let tempUnit;
+                
+                if (isTower) {
+                    tempUnit = new Tower(previewPos.x, previewPos.y, unitToPlace);
+                } else {
+                    tempUnit = new GroundUnit(previewPos.x - TOWER_STATS[unitToPlace].width/2, previewPos.y - TOWER_STATS[unitToPlace].height/2);
+                }
+                
+                const requiredRadius = tempUnit.getHitboxRadius();
+                // プレビューユニットは常にgetCenterで中心座標を取得
+                const center = tempUnit.getCenter();
+                const checkX = center.x;
+                const checkY = center.y;
+                const isValid = checkPlacementValidity(checkX, checkY, requiredRadius, isTower);
+                
+                // drawRangeのためにx, yを再設定
+                tempUnit.x = isTower ? previewPos.x : previewPos.x - TOWER_STATS[unitToPlace].width/2;
+                tempUnit.y = isTower ? previewPos.y : previewPos.y - TOWER_STATS[unitToPlace].height/2;
+
+                tempUnit.drawRange(isValid);
+            }
+        }
+
+        function updateDisplay() {
+            document.getElementById('wave-display').textContent = currentWave;
+            document.getElementById('gold-display').textContent = stats.gold;
+            document.getElementById('core-hp-display').textContent = stats.coreHp;
+            
+            if (gameStatus === 'preparation') {
+                for (const type in TOWER_COST) {
+                    const btn = document.getElementById(`place-${type}`);
+                    btn.disabled = stats.gold < TOWER_COST[type];
+                }
+            }
+        }
+        
+        function setUnitToPlace(type) {
+            if (gameStatus !== 'preparation' || stats.gold < TOWER_COST[type]) return;
+            
+            document.querySelectorAll('#control-panel button:not([id^="speed-"])').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`place-${type}`).classList.add('active');
+
+            unitToPlace = type;
+            document.getElementById('status-message').className = 'status-valid';
+            document.getElementById('status-message').textContent = `${type}を配置する場所をクリックしてください。`;
+            canvas.style.cursor = 'crosshair';
+        }
+        
+        function checkPlacementValidity(x, y, requiredRadius, isTower) {
+            // 1. ルート上のチェック
+            if (isTower) {
+                if (isPointOnPath(x, y)) {
+                    document.getElementById('status-message').textContent = `タワーはルート上には配置できません！`;
+                    document.getElementById('status-message').className = 'status-invalid';
+                    return false;
+                }
+            } else { 
+                if (!isPointOnPath(x, y)) {
+                    document.getElementById('status-message').textContent = `ソルジャーはルート上にしか配置できません！`;
+                    document.getElementById('status-message').className = 'status-invalid';
+                    return false;
+                }
+            }
+            
+            // 2. 他のユニットと重なっていないかチェック (FIX: TowerのgetCenter()が使えるようになった)
+            const allUnits = [...towers, ...groundUnits];
+            for (const unit of allUnits) {
+                // 既存のユニットは必ず getCenter() を持つようになった
+                const unitCenter = unit.getCenter();
+                const distSq = Math.pow(unitCenter.x - x, 2) + Math.pow(unitCenter.y - y, 2);
+                const min_dist = unit.getHitboxRadius() + requiredRadius;
+                if (distSq < min_dist * min_dist) {
+                    document.getElementById('status-message').textContent = `他のユニットと近すぎます！`;
+                    document.getElementById('status-message').className = 'status-invalid';
+                    return false;
+                }
+            }
+            
+            // 3. 端に近すぎないかチェック (タワーのみ)
+            if (isTower) {
+                if (x < 20 || x > WIDTH - 20 || y < 20 || y > HEIGHT - 20) {
+                    document.getElementById('status-message').textContent = `マップの端に近すぎます！`;
+                    document.getElementById('status-message').className = 'status-invalid';
+                    return false;
+                }
+            }
+
+            document.getElementById('status-message').textContent = `配置可能！クリックして確定。`;
+            document.getElementById('status-message').className = 'status-valid';
+            return true;
+        }
+
+        canvas.addEventListener('click', (e) => {
+            if (gameStatus !== 'preparation' || !unitToPlace) return;
+            
+            const type = unitToPlace;
+            const isTower = TOWER_STATS[type].type === 'TOWER';
+            const pos = getCanvasMousePosition(e);
+            
+            let tempUnit;
+            let placementX, placementY;
+
+            if (isTower) {
+                tempUnit = new Tower(pos.x, pos.y, type);
+                placementX = pos.x;
+                placementY = pos.y;
+            } else { 
+                placementX = pos.x - TOWER_STATS[type].width / 2;
+                placementY = pos.y - TOWER_STATS[type].height / 2;
+                tempUnit = new GroundUnit(placementX, placementY);
+                const center = tempUnit.getCenter(); // 配置チェック用の中心座標
+                placementX = center.x; 
+                placementY = center.y; 
+            }
+            
+            if (!checkPlacementValidity(placementX, placementY, tempUnit.getHitboxRadius(), isTower)) {
+                return; 
+            }
+
+            const cost = TOWER_COST[type];
+            stats.gold -= cost;
+            
+            if (isTower) {
+                towers.push(new Tower(pos.x, pos.y, type));
+            } else {
+                // GroundUnitは左上座標でインスタンス化
+                groundUnits.push(new GroundUnit(pos.x - TOWER_STATS[type].width / 2, pos.y - TOWER_STATS[type].height / 2));
+            }
+            
+            document.querySelectorAll('#control-panel button:not([id^="speed-"])').forEach(btn => btn.classList.remove('active'));
+            unitToPlace = null; 
+            canvas.style.cursor = 'pointer';
+            document.getElementById('status-message').className = 'status-valid';
+            document.getElementById('status-message').textContent = `${type}を配置しました。`;
+            updateDisplay();
+        });
+        
+        canvas.addEventListener('mousemove', (e) => {
+            if (unitToPlace) {
+                previewPos = getCanvasMousePosition(e);
+                const isTower = TOWER_STATS[unitToPlace].type === 'TOWER';
+
+                let tempUnit;
+                if (isTower) {
+                    tempUnit = new Tower(previewPos.x, previewPos.y, unitToPlace);
+                } else {
+                    tempUnit = new GroundUnit(previewPos.x - TOWER_STATS[unitToPlace].width/2, previewPos.y - TOWER_STATS[unitToPlace].height/2);
+                }
+
+                const requiredRadius = tempUnit.getHitboxRadius();
+                const center = tempUnit.getCenter();
+                const checkX = center.x;
+                const checkY = center.y;
+                
+                checkPlacementValidity(checkX, checkY, requiredRadius, isTower);
+            }
+        });
+        
+        canvas.addEventListener('touchmove', (e) => {
+            if (unitToPlace && e.touches.length === 1) {
+                previewPos = getCanvasMousePosition(e);
+                
+                const isTower = TOWER_STATS[unitToPlace].type === 'TOWER';
+                let tempUnit;
+
+                if (isTower) {
+                    tempUnit = new Tower(previewPos.x, previewPos.y, unitToPlace);
+                } else {
+                    tempUnit = new GroundUnit(previewPos.x - TOWER_STATS[unitToPlace].width/2, previewPos.y - TOWER_STATS[unitToPlace].height/2);
+                }
+                
+                const requiredRadius = tempUnit.getHitboxRadius();
+                const center = tempUnit.getCenter();
+                const checkX = center.x;
+                const checkY = center.y;
+
+                checkPlacementValidity(checkX, checkY, requiredRadius, isTower);
+                e.preventDefault(); 
+            }
+        }, { passive: false });
+
+
+        // --- メインループ ---
+
+        function gameLoop() {
+            if (gameStatus !== 'gameover') {
+                updateGame();
+                draw();
+                requestAnimationFrame(gameLoop);
+            }
+        }
+        
+        updateDisplay();
+        gameLoop(); 
+    </script>
+</body>
+</html>
