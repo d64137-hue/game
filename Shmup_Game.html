@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>[2025/10/18 最終修正] 弾幕サバイバル - 衝突ログON</title>
+    <title>[2025/10/18 最終修正] 弾幕サバイバル - ドラッグバグ修正済</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
         body { 
@@ -736,7 +736,8 @@
             for (let i = 0; i < enemyBullets.length; i++) {
                 const bullet = enemyBullets[i];
                 const dist = Math.sqrt(Math.pow(bullet.x - playerCenter.x, 2) + Math.pow(bullet.y - playerCenter.y, 2));
-                const threshold = bullet.radius + playerCenter.radius;
+                // 敵弾の当たり判定半径 (bullet.radius) + プレイヤーの当たり判定半径 (playerCenter.radius)
+                const threshold = bullet.radius + playerCenter.radius; 
 
                 if (dist < threshold) {
                     
@@ -745,17 +746,15 @@
                     // 衝突時のデバッグログ出力
                     console.log(`%c[COLLISION! - Frame: ${gameFrame}] P(x,y):(${playerCenter.x.toFixed(2)}, ${playerCenter.y.toFixed(2)}) B(x,y):(${bullet.x.toFixed(2)}, ${bullet.y.toFixed(2)}) Dist:${dist.toFixed(2)} Threshold:${threshold.toFixed(2)} iFrames:${player.iFrames} Barrier:${skillEffects.barrier}`, 'color: yellow; font-weight: bold;');
                     
-                    // 弾は常に消す
+                    // 弾は常に消すため、配列に追加しない
                     // ただし、iFramesやバリアがない場合のみダメージを与える
                     if (skillEffects.barrier === 0 && player.iFrames === 0) {
                         player.takeDamage(10); 
                         updateDisplay();
-                        // 1フレームで複数弾に当たっても、takeDamage内でiFramesが付与されるため多重ダメージは防げる
-                        // しかし、複数の弾が同じフレームで同時に当たったという記録を残すためにフラグを使う
                         damaged = true; 
                     }
 
-                    // 弾はここで消滅するため、配列に追加しない
+                    // 弾はここで消滅するため、配列に追加しない (newEnemyBulletsには入れない)
                 } else {
                     if (!bullet.update()) {
                         newEnemyBullets.push(bullet);
@@ -1133,10 +1132,12 @@
         });
         
         // --- ドラッグ/タッチ操作 ---
+        // 🚨 修正箇所: TypeErrorを解消するため、clientYの取得ロジックを修正
         function getCanvasMousePosition(event) {
             const rect = canvas.getBoundingClientRect();
+            // event.touchesが存在する場合(タッチ)はtouches[0]、それ以外(マウス)はevent自体から座標を取得
             const clientX = event.touches ? event.touches[0].clientX : event.clientX;
-            const clientY = event.touches ? event.touches[0].clientY : event.touches[0].clientY;
+            const clientY = event.touches ? event.touches[0].clientY : event.clientY; // 👈 ここを修正
             
             const x = (clientX - rect.left) * (canvas.width / rect.width);
             const y = (clientY - rect.top) * (canvas.height / rect.height);
