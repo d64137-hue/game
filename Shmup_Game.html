@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>🌌 Waveサバイバルシューティング (最終調整版)</title>
+    <title>[2025/10/18 更新] 弾幕サバイバルゲーム - ヒットボックス可視化</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
         body { 
@@ -16,7 +16,7 @@
             overflow-y: auto;
         }
         h1 {
-            color: #76FF03;
+            color: #FFC300; /* 目立つ色に変更 */
             margin-bottom: 20px;
         }
         #NewGameArea {
@@ -29,7 +29,7 @@
         }
         #NewGameCanvas {
             background: #00001a;
-            border: 2px solid #76FF03;
+            border: 2px solid #FFC300;
             display: block;
             margin: 20px auto;
             cursor: pointer; 
@@ -38,7 +38,7 @@
         #game-info {
             font-size: 1.2em;
             margin-bottom: 10px;
-            color: #76FF03;
+            color: #FFC300;
         }
         /* オーバーレイ共通スタイル */
         #overlay {
@@ -83,7 +83,7 @@
             color: #ccc;
         }
         .crystal-upgrade-button {
-            background-color: #1E90FF !important; /* 青色 */
+            background-color: #1E90FF !important; 
             color: white !important;
         }
         #reset-button {
@@ -100,7 +100,8 @@
 </head>
 <body>
     <div id="NewGameArea">
-        <h1>🌌 Waveサバイバルシューティング (高密度弾幕)</h1>
+        <h1>[2025/10/18 更新] 弾幕サバイバルゲーム</h1>
+        <p style="color:red; font-weight:bold;">🚨 赤い点はあなたの被弾コアです。これに触れたらダメージです。🚨</p>
         
         <div id="game-info">
             Wave: <span id="wave-display">1</span> | GOLD: <span id="gold-display">0</span> | CRYSTAL: <span id="crystal-display">0</span>
@@ -113,7 +114,7 @@
                 <div id="start-screen" style="background: rgba(0, 0, 0, 0.9); padding: 40px; border-radius: 10px; text-align: center;">
                     <h2>Waveサバイバル開始！</h2>
                     <p>WASD/矢印キーで移動、X/スペースで攻撃。<br>J(回復), K(連射), L(バリア)でスキル発動！<br>Shift/Zで**精密回避モード**</p>
-                    <button onclick="startGame()" style="padding: 15px 30px; font-size: 1.5em; background: #76FF03; color: black; border: none; border-radius: 5px; margin-top: 20px;">スタート WAVE 1</button>
+                    <button onclick="startGame()" style="padding: 15px 30px; font-size: 1.5em; background: #FFC300; color: black; border: none; border-radius: 5px; margin-top: 20px;">スタート WAVE 1</button>
                 </div>
 
                 <div id="shop-container" style="display: none; background: rgba(0, 0, 0, 0.9); padding: 20px; box-sizing: border-box; flex-direction: column; align-items: center;">
@@ -208,7 +209,7 @@
                 this.x = WIDTH / 2 - this.width / 2;
                 this.y = HEIGHT - this.height - 10;
                 this.color = 'cyan';
-                this.hitRadius = 3; // プレイヤーのヒットボックス半径
+                this.hitRadius = 3; // プレイヤーのヒットボックス半径 (固定)
                 this.currentHp = stats.currentHp;
                 this.iFrames = 0; // 無敵時間カウンター (フレーム)
             }
@@ -235,14 +236,14 @@
                 if (skillEffects.barrier > 0 || this.iFrames > 0) return; // 無敵時間中はダメージ無効
 
                 this.currentHp -= damage;
-                stats.currentHp = this.currentHp; // 🔥 修正: HPを減らした直後にstatsを更新
+                stats.currentHp = this.currentHp; 
 
                 this.iFrames = 20; // 20フレーム (約0.33秒) の無敵時間を付与
 
                 // バグ修正: HPが0以下になったら直ちにゲームオーバー判定を行う
                 if (this.currentHp <= 0) {
-                    this.currentHp = 0; // HPを0に固定
-                    stats.currentHp = 0; // 再度確実に0にする
+                    this.currentHp = 0; 
+                    stats.currentHp = 0; 
                     gameOver();
                 }
             }
@@ -253,7 +254,6 @@
                 const pBarHeight = 15;
                 const pBarX = WIDTH - pBarWidth - 10;
                 const pBarY = HEIGHT - pBarHeight - 10;
-                // HP表示も常にstats.currentHpから取得
                 const pRatio = Math.max(0, stats.currentHp) / stats.maxHp; 
 
                 ctx.fillStyle = '#444';
@@ -288,7 +288,7 @@
 
                 // 無敵時間中の点滅処理
                 if (this.iFrames > 0) {
-                    if (gameFrame % 5 < 2) { // わずかな点滅で無敵を表示
+                    if (gameFrame % 5 < 2) { 
                         ctx.globalAlpha = 0.3; 
                     }
                 }
@@ -308,11 +308,13 @@
                     ctx.stroke();
                 }
 
-                // 3. 当たり判定（黄色い点）
-                // プレイヤーのヒットボックスを描画
-                ctx.fillStyle = isSlow ? 'yellow' : 'red';
+                // 3. 当たり判定の**デバッグ表示**（🔴）
+                ctx.globalAlpha = 1.0; // 不透明度を戻す
+                ctx.fillStyle = (this.iFrames > 0 || isInvincible) ? 'rgba(255, 255, 0, 0.7)' : 'rgba(255, 0, 0, 0.8)'; // 無敵中は黄色、通常時は赤
                 ctx.beginPath();
-                ctx.arc(center.x, center.y, this.hitRadius + 1, 0, Math.PI * 2);
+                // 低速移動時はわずかに大きく表示して視認性を高める
+                const visualRadius = this.hitRadius + (isSlow ? 1 : 0);
+                ctx.arc(center.x, center.y, visualRadius, 0, Math.PI * 2);
                 ctx.fill();
                 
                 ctx.globalAlpha = 1.0; // 描画後に元に戻す
@@ -404,7 +406,7 @@
                             let angle = startAngle + i * angleStep;
                             let dx = Math.cos(angle) * speed;
                             let dy = Math.sin(angle) * speed;
-                            // 🔥 敵弾の半径を 3 に調整 (5 -> 3)
+                            // 敵弾の半径を 3 に調整済み
                             enemyBullets.push(new EnemyBullet(center.x, center.y, dy, 'red', dx, 3));
                         }
                         break;
@@ -415,7 +417,7 @@
                             let angle = i * angleStep + gameFrame * 0.05;
                             let dx = Math.cos(angle) * speed * 0.6;
                             let dy = Math.sin(angle) * speed * 0.6;
-                            // 🔥 敵弾の半径を 2 に調整 (3 -> 2)
+                            // 敵弾の半径を 2 に調整済み
                             enemyBullets.push(new EnemyBullet(center.x, center.y, dy, 'purple', dx, 2));
                         }
                         break;
@@ -425,7 +427,7 @@
                             let currentFollowSpeed = Math.min(1.0, 0.8 + currentWave * 0.05); 
                             let dx = Math.cos(angle) * currentFollowSpeed; 
                             let dy = Math.sin(angle) * currentFollowSpeed;
-                            // 🔥 敵弾の半径を 3 に調整 (6 -> 3)
+                            // 敵弾の半径を 3 に調整済み
                             enemyBullets.push(new EnemyBullet(center.x, center.y, dy, 'lime', dx, 3, 240)); 
                         }
                         break;
@@ -435,7 +437,7 @@
                             let angle = (i * (360 / num) + gameFrame * 0.5) * (Math.PI / 180);
                             let dx = Math.cos(angle) * speed * 0.7;
                             let dy = Math.sin(angle) * speed * 0.7;
-                            // 🔥 敵弾の半径を 3 に調整 (4 -> 3)
+                            // 敵弾の半径を 3 に調整済み
                             enemyBullets.push(new EnemyBullet(center.x, center.y, dy, 'yellow', dx, 3));
                         }
                         break;
@@ -448,7 +450,7 @@
                             let highSpeed = Math.min(speed * 1.3, 7.5); 
                             let dx = Math.cos(angle) * highSpeed;
                             let dy = Math.sin(angle) * highSpeed;
-                            // 🔥 敵弾の半径を 2 に調整 (3 -> 2)
+                            // 敵弾の半径を 2 に調整済み
                             enemyBullets.push(new EnemyBullet(center.x, center.y, dy, 'blue', dx, 2));
                         }
                         break;
@@ -457,7 +459,7 @@
                         for (let i = 0; i < num; i++) {
                             let dx = (i % 2 === 0 ? speed * 0.5 : 0) * (Math.random() > 0.5 ? 1 : -1);
                             let dy = (i % 2 !== 0 ? speed * 0.5 : 0) * speed * 0.5;
-                            // 🔥 敵弾の半径を 3 に調整 (8 -> 3)
+                            // 敵弾の半径を 3 に調整済み
                             enemyBullets.push(new EnemyBullet(center.x + (i % 2 === 0 ? 0 : 20), center.y, dy, 'orange', dx, 3, 0, true));
                         }
                         break;
@@ -468,7 +470,7 @@
                             let s = speed * (1.2 + Math.random() * 0.3); 
                             let dx = Math.cos(angle) * s;
                             let dy = Math.sin(angle) * s;
-                            // 🔥 敵弾の半径を 2 に調整 (3 -> 2)
+                            // 敵弾の半径を 2 に調整済み
                             enemyBullets.push(new EnemyBullet(center.x, center.y, dy, 'white', dx, 2));
                         }
                         break;
@@ -478,29 +480,29 @@
                             let fastTargetSpeed = Math.min(speed * 1.0, 6.0);
                             let dx = Math.cos(angle) * fastTargetSpeed;
                             let dy = Math.sin(angle) * fastTargetSpeed;
-                            // 🔥 敵弾の半径を 3 に調整 (4 -> 3)
+                            // 敵弾の半径を 3 に調整済み
                             enemyBullets.push(new EnemyBullet(center.x, center.y, dy, '#FF5733', dx, 3)); 
                             enemyBullets.push(new EnemyBullet(center.x, center.y, dy * 0.5, '#FF5733', dx * 0.5, 3)); 
                         }
                         break;
-                    case 8: // (新) 広範囲反射弾 (ピンク: 左右端で跳ねる) - 反射回数4
+                    case 8: // 広範囲反射弾 (ピンク: 左右端で跳ねる) - 反射回数4
                         num = 8 + bulletDensity;
                         for (let i = 0; i < num; i++) {
                             let startX = center.x + (i - num/2) * 20; 
                             let angle = Math.atan2(player.getCenter().y - center.y, player.getCenter().x - startX);
                             let dx = Math.cos(angle) * speed * 0.8;
                             let dy = Math.sin(angle) * speed * 0.8;
-                            // 🔥 敵弾の半径を 3 に調整 (4 -> 3)
+                            // 敵弾の半径を 3 に調整済み
                             enemyBullets.push(new EnemyBullet(startX, center.y, dy, 'pink', dx, 3, 0, false, 4));
                         }
                         break;
-                    case 9: // カーテン (上下左右にずれたライン) - 半径4
+                    case 9: // カーテン (上下左右にずれたライン)
                         num = 10 + bulletDensity * 2;
                         for (let i = 0; i < num; i++) {
                             let dx = 0;
                             let dy = speed * 0.4;
                             let spawnX = (WIDTH / num) * i + Math.sin(gameFrame * 0.1) * 10;
-                            // 🔥 敵弾の半径を 3 に調整 (4 -> 3)
+                            // 敵弾の半径を 3 に調整済み
                             enemyBullets.push(new EnemyBullet(spawnX, 0, dy, 'gray', dx, 3)); 
                         }
                         break;
@@ -512,7 +514,7 @@
                                 let angle = i * Math.PI * 2 / num;
                                 let dx = Math.cos(angle) * speed * 0.6;
                                 let dy = Math.sin(angle) * speed * 0.6;
-                                // 🔥 敵弾の半径を 3 に調整 (5 -> 3)
+                                // 敵弾の半径を 3 に調整済み
                                 enemyBullets.push(new EnemyBullet(center.x, center.y, dy, '#FFC300', dx, 3));
                             }
                         }
@@ -526,7 +528,7 @@
                                     let s = speed * 0.5 + j * 0.3;
                                     let dx = Math.cos(angle) * s;
                                     let dy = Math.sin(angle) * s;
-                                    // 🔥 敵弾の半径を 2 に調整 (3 -> 2)
+                                    // 敵弾の半径を 2 に調整済み
                                     enemyBullets.push(new EnemyBullet(center.x, center.y, dy, '#900C3F', dx, 2));
                                 }
                             }
@@ -752,11 +754,12 @@
             // 2. 敵弾 vs プレイヤー
             enemyBullets = enemyBullets.filter(bullet => {
                 const playerCenter = player.getCenter();
+                // 💥 衝突判定ロジック: 距離が両方の半径の合計より小さいか
                 const dist = Math.sqrt(Math.pow(bullet.x - playerCenter.x, 2) + Math.pow(bullet.y - playerCenter.y, 2));
                 
                 if (dist < bullet.radius + playerCenter.radius) {
                     
-                    // 🔥【多重ヒット対策: 無敵/バリアで弾を消す】
+                    // 【多重ヒット対策: 無敵/バリアで弾を消す】
                     if (skillEffects.barrier > 0 || player.iFrames > 0) {
                         return false; // 当たってもダメージは無効、**弾は確実に消す**
                     }
@@ -947,7 +950,7 @@
             });
             html += `</div>`;
 
-            html += `<button onclick="closeShop()" style="padding: 15px 30px; font-size: 1.5em; background: #76FF03; color: black; border: none; border-radius: 5px; margin-top: 20px;">WAVE ${currentWave + 1} へ</button>`;
+            html += `<button onclick="closeShop()" style="padding: 15px 30px; font-size: 1.5em; background: #FFC300; color: black; border: none; border-radius: 5px; margin-top: 20px;">WAVE ${currentWave + 1} へ</button>`;
             
             shopContainer.innerHTML = html;
         }
