@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chicken Shooter Game</title>
+    <style>
+        /* CSS: スタイル */
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+            position: relative;
+        }
+        #game-container {
+            position: relative;
+            border: 2px solid #333;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        #gameCanvas {
+            background-color: transparent; /* 背景色を透明 */
+            display: block;
+        }
+        #game-info {
+            width: 800px; /* キャンバス幅と合わせる */
+            padding: 10px 0;
+            display: flex;
+            justify-content: space-around;
+            background-color: #333;
+            color: white;
+            font-size: 1.2em;
+        }
+        #game-over-screen, #upgrade-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            display: none; 
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            z-index: 100;
+        }
+        #upgrade-screen div {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #4CAF50;
+            color: white;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        /* 武器ボタンの色とスタイル */
+        #upgrade-weapon {
+            background-color: #e57373; /* 赤系 */
+        }
+        #upgrade-weapon:hover {
+            background-color: #c62828;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🧟‍♀️ゾンビサバイバル</h1>
+    
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        
+        <div id="game-info">
+            <span>スコア: <span id="score">0</span></span>
+            <span>HP: <span id="health">100</span></span>
+            <span>WAVE: <span id="wave-number">1</span></span>
+        </div>
+
+        <div id="game-over-screen">
+            <h2>GAME OVER</h2>
+            <p>最終スコア: <span id="final-score">0</span></p>
+            <button id="restart-button">リスタート</button>
+        </div>
+
+        <div id="upgrade-screen">
+            <h2>ウェーブクリア！アップグレードを選択してください</h2>
+            <div style="display: flex; gap: 20px; margin-top: 20px;">
+                <button id="upgrade-damage">攻撃力 +5% 💥</button>
+                <button id="upgrade-speed">移動速度 +7% 💨</button>
+                <button id="upgrade-health">HP +30回復 ❤️</button>
+                
+                <button id="upgrade-weapon" style="display: none;">
+                    武器アップグレード
+                </button>
+            </div>
+        </div>
+    </div>
+
+<script>
+    // --- グローバル変数と定数の定義 ---
+
+    let canvas, ctx, W, H;
+    let score = 0;
+    let isGameOver = false;
+    let gameLoopId;
+    let bulletTimer; 
+
+    // --- ウェーブ管理定数/変数 ---
+    let currentWave = 0;             
+    let enemiesToSpawn = 0;          
+    let enemiesSpawned = 0;          
+    const BASE_ENEMY_COUNT = 4;      
+    const ENEMY_INCREASE_RATE = 0.1; 
+    const WAVE_SPAWN_INTERVAL = 15;  
+    let waveSpawnTimer = 0;          
+
+    // --- 速度・HP・ダメージ定数 ---
+    const BASE_PLAYER_SPEED = 1.5;   
+    const PLAYER_SPEED_INCREASE = 0.02; 
+    const BASE_ENEMY_SPEED = 0.25;   
+    const SPEED_INCREASE_PER_WAVE = 0.1; 
+    
+    const BASE_ENEMY_HEALTH = 10;    
+    const ENEMY_HP_INCREASE = 0.02;  
+    const BASE_BULLET_DAMAGE = 10;   
+
+    // --- パワーアップ定数/変数 ---
+    const POWER_UP_SCORE_INTERVAL = 200; 
+    const SCORE_POWER_UP_RATE = 0.01;    
+    let nextPowerUpScore = POWER_UP_SCORE_INTERVAL; 
+
+    // --- アップグレード定数 (ウェーブクリア) ---
+    const UPGRADE_DAMAGE_RATE = 0.05; 
+    const UPGRADE_SPEED_RATE = 0.07;  
+    const UPGRADE_HP_RECOVERY = 30;   
+    const WEAPON_DROP_CHANCE = 0.04; // 4%の確率で武器ドロップ
+    
+    // --- 武器定義 ---
+    const BULLET_COOLDOWN = 30; // 基準となる連射間隔（長ければ遅い）
+    const BULLET_SPEED = 7;     // 基準となる弾速
+    
+    const WEAPONS = {
+        'default': { name: '初期ピストル', damageMultiplier: 1.0, cooldownMultiplier: 1.0, bulletCount: 1, bulletSpeedMultiplier: 1.0, pierce: false },
+        'shotgun': { name: 'AA-12 フルオートショットガン', damageMultiplier: 1.0, cooldownMultiplier: 1.0 * 0.75, bulletCount: 4, bulletSpeedMultiplier: 1.0, pierce: false },
+        'machinegun': { name: 'AK-47', damageMultiplier: 1.0, cooldownMultiplier: 1.0 * 0.5, bulletCount: 1, bulletSpeedMultiplier: 1.0, pierce: false },
+        'minigun': { name: 'ミニガン M-134', damageMultiplier: 0.75, cooldownMultiplier: 1.0 * 0.25, bulletCount: 1, bulletSpeedMultiplier: 1.0, pierce: false },
+        'heavymachinegun': { name: '重機関銃M2ブローニング', damageMultiplier: 2.0, cooldownMultiplier: 1.0 * 0.5, bulletCount: 1, bulletSpeedMultiplier: 1.0, pierce: false },
+        'sniperrifle': { name: 'SVDドラグノフ狙撃銃', damageMultiplier: 4.0, cooldownMultiplier: 1.0 * 2.0, bulletCount: 1, bulletSpeedMultiplier: 3.0, pierce: true }
+    };
+
+    // --- グローバルステータス変数 (乗数管理) ---
+    let playerSpeed = BASE_PLAYER_SPEED;
+    let bulletDamage = BASE_BULLET_DAMAGE;
+    let isUpgrading = false; 
+    
+    let waveSpeedMultiplier = 1.0;     
+    let scoreMultiplier = 1.0;         
+    let upgradeSpeedMultiplier = 1.0;  
+    let upgradeDamageMultiplier = 1.0; 
+    
+    // 武器ステータス
+    let currentWeaponKey = 'default';
+    let currentWeapon = WEAPONS['default'];
+    
+    let mousePos;
+    let player;
+    let enemies = [];
+    let bullets = [];
+    let keys = {};
+
+    // --- 関数定義 ---
+
+    // 統計値の再計算
+    function updateStats() {
+        waveSpeedMultiplier = Math.pow(1 + PLAYER_SPEED_INCREASE, currentWave - 1);
+        playerSpeed = BASE_PLAYER_SPEED * waveSpeedMultiplier * scoreMultiplier * upgradeSpeedMultiplier;
+        
+        // 最終ダメージ = 基本ダメージ * (スコア倍率) * (アップグレード倍率) * (武器倍率)
+        bulletDamage = BASE_BULLET_DAMAGE * scoreMultiplier * upgradeDamageMultiplier * currentWeapon.damageMultiplier;
+    }
+
+    // 次のウェーブを開始
+    function startNextWave() {
+        currentWave++;
+        enemiesSpawned = 0;
+        
+        enemiesToSpawn = Math.floor(
+            BASE_ENEMY_COUNT * Math.pow(1 + ENEMY_INCREASE_RATE, currentWave - 1)
+        );
+        
+        if (currentWave === 1) {
+            enemiesToSpawn = BASE_ENEMY_COUNT;
+        }
+
+        updateStats();
+        updateWaveDisplay();
+        
+        if (!isGameOver && !isUpgrading) {
+            if (gameLoopId) cancelAnimationFrame(gameLoopId);
+            gameLoopId = requestAnimationFrame(gameLoop);
+        }
+    }
+
+    // 武器の発射ロジック
+    function fireWeapon() {
+        const weapon = currentWeapon;
+        
+        const dx = mousePos.x - player.x;
+        const dy = mousePos.y - player.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist > 0) {
+            // 弾の分散角度 (ショットガンの場合)
+            // 複数の弾を撃つ場合、扇状に15度分散
+            const spreadAngle = weapon.bulletCount > 1 ? (Math.PI / 180) * 15 : 0; 
+            const totalBullets = weapon.bulletCount;
+            const centerAngle = Math.atan2(dy, dx); // 照準の角度
+
+            for (let i = 0; i < totalBullets; i++) {
+                let currentAngle;
+                
+                if (totalBullets === 1) {
+                    currentAngle = centerAngle;
+                } else {
+                    // 扇状に角度を分散
+                    const angleOffset = (i - (totalBullets - 1) / 2) * (spreadAngle / (totalBullets - 1));
+                    currentAngle = centerAngle + angleOffset;
+                }
+
+                const vx = Math.cos(currentAngle) * (BULLET_SPEED * weapon.bulletSpeedMultiplier);
+                const vy = Math.sin(currentAngle) * (BULLET_SPEED * weapon.bulletSpeedMultiplier);
+
+                bullets.push({ 
+                    x: player.x, 
+                    y: player.y, 
+                    radius: 5, 
+                    vx: vx, 
+                    vy: vy,
+                    pierce: weapon.pierce // 貫通属性
+                });
+            }
+            
+            // 武器の連射力に基づきクールダウンを設定
+            bulletTimer = BULLET_COOLDOWN * weapon.cooldownMultiplier;
+        }
+    }
+
+    // --- 描画関数 ---
+    function drawPlayer() {
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+        ctx.fillStyle = player.color;
+        ctx.fill();
+        ctx.strokeStyle = 'black';
+        ctx.stroke();
+        ctx.closePath();
+    }
+
+    function drawEnemies() {
+        enemies.forEach(enemy => {
+            ctx.beginPath();
+            ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI * 2);
+            ctx.fillStyle = enemy.color;
+            ctx.fill();
+            ctx.strokeStyle = 'red';
+            ctx.stroke();
+            ctx.closePath();
+            
+            // 敵のHPバー
+            const maxHp = BASE_ENEMY_HEALTH * Math.pow(1 + ENEMY_HP_INCREASE, currentWave - 1); 
+            const hpRatio = enemy.health / maxHp;
+            const barWidth = enemy.radius * 2;
+            const barHeight = 3;
+            ctx.fillStyle = 'black';
+            ctx.fillRect(enemy.x - barWidth / 2, enemy.y - enemy.radius - barHeight - 2, barWidth, barHeight);
+            ctx.fillStyle = hpRatio > 0.5 ? 'lime' : (hpRatio > 0.2 ? 'yellow' : 'red');
+            ctx.fillRect(enemy.x - barWidth / 2, enemy.y - enemy.radius - barHeight - 2, barWidth * hpRatio, barHeight);
+        });
+    }
+
+    function drawBullets() {
+        bullets.forEach(bullet => {
+            ctx.beginPath();
+            ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
+            ctx.fillStyle = bullet.pierce ? 'orange' : 'blue'; // 貫通弾は色を変える
+            ctx.fill();
+            ctx.closePath();
+        });
+    }
+
+    // --- 更新関数 ---
+    function updatePlayer() {
+        if (keys['KeyW'] || keys['ArrowUp']) player.y -= playerSpeed;
+        if (keys['KeyS'] || keys['ArrowDown']) player.y += playerSpeed;
+        if (keys['KeyA'] || keys['ArrowLeft']) player.x -= playerSpeed;
+        if (keys['KeyD'] || keys['ArrowRight']) player.x += playerSpeed;
+
+        player.x = Math.max(player.radius, Math.min(W - player.radius, player.x));
+        player.y = Math.max(player.radius, Math.min(H - player.radius, player.y));
+
+        if (bulletTimer <= 0) {
+            fireWeapon();
+        } else {
+            bulletTimer--;
+        }
+    }
+
+    function updateEnemies() {
+        enemies = enemies.filter(enemy => {
+            const dx = player.x - enemy.x;
+            const dy = player.y - enemy.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            enemy.x += (dx / dist) * enemy.speed;
+            enemy.y += (dy / dist) * enemy.speed;
+
+            if (dist < player.radius + enemy.radius) {
+                player.health -= enemy.damage;
+                updateHealthDisplay();
+                return false;
+            }
+            return true; 
+        });
+    }
+
+    function updateBullets() {
+        bullets = bullets.filter(bullet => {
+            bullet.x += bullet.vx;
+            bullet.y += bullet.vy;
+
+            for (let i = 0; i < enemies.length; i++) {
+                const enemy = enemies[i];
+                const dist = Math.sqrt((bullet.x - enemy.x)**2 + (bullet.y - enemy.y)**2);
+                
+                if (dist < bullet.radius + enemy.radius) {
+                    enemy.health -= bulletDamage; 
+                    
+                    if (enemy.health <= 0) {
+                        score += 10;
+                        updateScoreDisplay();
+                        enemies.splice(i, 1); 
+                        i--; // 配列のインデックスがずれるのを調整
+                    }
+                    
+                    // 貫通しない弾はここで消滅
+                    if (!bullet.pierce) {
+                        return false; 
+                    }
+                }
+            }
+            
+            // 画面外に出た弾は消滅 (壁に当たったら消滅)
+            if (
+                bullet.x < -bullet.radius || 
+                bullet.x > W + bullet.radius || 
+                bullet.y < -bullet.radius || 
+                bullet.y > H + bullet.radius
+            ) {
+                return false;
+            }
+
+            // 貫通弾は、敵に当たっても画面外に出るまでtrueを返す
+            return true; 
+        });
+    }
+
+    // ウェーブ管理とスポーン
+    function handleEnemySpawning() {
+        if (enemiesSpawned < enemiesToSpawn) {
+            waveSpawnTimer++;
+            
+            if (waveSpawnTimer >= WAVE_SPAWN_INTERVAL) {
+                waveSpawnTimer = 0;
+                spawnSingleEnemy();
+                enemiesSpawned++;
+            }
+        } 
+        else if (enemiesToSpawn > 0 && enemies.length === 0 && enemiesSpawned === enemiesToSpawn) {
+            cancelAnimationFrame(gameLoopId); 
+            showUpgradeScreen(); 
+            return; 
+        }
+    }
+
+    function spawnSingleEnemy() {
+        let x, y;
+        const side = Math.floor(Math.random() * 4);
+        
+        if (side === 0) { x = Math.random() * W; y = -30; }
+        else if (side === 1) { x = W + 30; y = Math.random() * H; }
+        else if (side === 2) { x = Math.random() * W; y = H + 30; }
+        else { x = -30; y = Math.random() * H; }
+
+        const enemySpeed = BASE_ENEMY_SPEED + (currentWave - 1) * SPEED_INCREASE_PER_WAVE;
+        const enemyHealth = BASE_ENEMY_HEALTH * Math.pow(1 + ENEMY_HP_INCREASE, currentWave - 1);
+        
+        enemies.push({
+            x: x, 
+            y: y, 
+            radius: 7.5, 
+            speed: enemySpeed, 
+            health: enemyHealth, 
+            damage: 10,
+            color: 'green'
+        });
+    }
+
+    // スコアによるパワーアップ
+    function applyScorePowerUp() {
+        const increase = 1 + SCORE_POWER_UP_RATE;
+        scoreMultiplier *= increase;
+        updateStats();
+        nextPowerUpScore += POWER_UP_SCORE_INTERVAL;
+    }
+
+    // 武器チェンジの実行
+    function changeWeapon(newWeaponKey) {
+        currentWeaponKey = newWeaponKey;
+        currentWeapon = WEAPONS[newWeaponKey];
+        updateStats(); // ダメージやクールダウンを適用
+    }
+
+    // アップグレード選択画面表示
+    function showUpgradeScreen() {
+        isUpgrading = true;
+        const weaponButton = document.getElementById('upgrade-weapon');
+        const weaponDrop = Math.random() < WEAPON_DROP_CHANCE; // 4%の確率
+        
+        if (weaponDrop) {
+            // 初期武器を除外し、ランダムに選択
+            const availableWeapons = Object.keys(WEAPONS).filter(k => k !== 'default');
+            const randomKey = availableWeapons[Math.floor(Math.random() * availableWeapons.length)];
+            const randomWeapon = WEAPONS[randomKey];
+
+            weaponButton.textContent = `武器チェンジ: ${randomWeapon.name} 🔫`;
+            weaponButton.style.display = 'block';
+            weaponButton.dataset.weaponKey = randomKey;
+        } else {
+            weaponButton.style.display = 'none';
+            weaponButton.dataset.weaponKey = '';
+        }
+
+        document.getElementById('upgrade-screen').style.display = 'flex';
+    }
+
+    // 通常アップグレード適用とゲーム再開
+    function applyUpgrade(type) {
+        if (type === 'damage') {
+            upgradeDamageMultiplier *= (1 + UPGRADE_DAMAGE_RATE); 
+        } else if (type === 'speed') {
+            upgradeSpeedMultiplier *= (1 + UPGRADE_SPEED_RATE); 
+        } else if (type === 'health') {
+            player.health = Math.min(100, player.health + UPGRADE_HP_RECOVERY);
+            updateHealthDisplay();
+        }
+        
+        updateStats();
+        
+        document.getElementById('upgrade-screen').style.display = 'none';
+        isUpgrading = false;
+        startNextWave();
+    }
+    
+    // 武器アップグレードの適用
+    function applyWeaponUpgrade() {
+        const weaponButton = document.getElementById('upgrade-weapon');
+        const newWeaponKey = weaponButton.dataset.weaponKey;
+        
+        if (newWeaponKey) {
+            changeWeapon(newWeaponKey);
+            // 通常アップグレードと同様にゲームを再開
+            document.getElementById('upgrade-screen').style.display = 'none';
+            isUpgrading = false;
+            startNextWave();
+        }
+    }
+
+    // UI更新
+    function updateScoreDisplay() {
+        document.getElementById('score').textContent = score;
+    }
+    
+    function updateHealthDisplay() {
+        document.getElementById('health').textContent = player.health;
+    }
+
+    function updateWaveDisplay() {
+        document.getElementById('wave-number').textContent = currentWave;
+    }
+
+    function gameOver() {
+        isGameOver = true;
+        cancelAnimationFrame(gameLoopId);
+        document.getElementById('final-score').textContent = score;
+        document.getElementById('game-over-screen').style.display = 'flex';
+    }
+
+    // --- メインゲームループ ---
+    function gameLoop() {
+        if (isGameOver || isUpgrading) return; 
+
+        // 描画クリア (背景は透明)
+        ctx.clearRect(0, 0, W, H); 
+
+        handleEnemySpawning();
+        updatePlayer();
+        updateEnemies();
+        updateBullets();
+
+        if (score >= nextPowerUpScore) {
+            applyScorePowerUp();
+        }
+
+        drawPlayer();
+        drawEnemies();
+        drawBullets();
+
+        if (player.health <= 0) {
+            gameOver();
+            return;
+        }
+
+        gameLoopId = requestAnimationFrame(gameLoop);
+    }
+
+    // --- ゲーム開始/リスタート関数 ---
+    function startGame() {
+        score = 0;
+        player.health = 100;
+        player.x = W / 2;
+        player.y = H / 2;
+        enemies = [];
+        bullets = [];
+        isGameOver = false;
+        currentWave = 0;
+        bulletTimer = BULLET_COOLDOWN; 
+
+        // 武器とパワーアップのリセット
+        changeWeapon('default'); // 武器を初期状態に戻す
+        nextPowerUpScore = POWER_UP_SCORE_INTERVAL;
+        waveSpeedMultiplier = 1.0;
+        scoreMultiplier = 1.0;
+        upgradeSpeedMultiplier = 1.0; 
+        upgradeDamageMultiplier = 1.0; 
+        isUpgrading = false;
+
+        updateScoreDisplay();
+        updateHealthDisplay();
+        document.getElementById('game-over-screen').style.display = 'none';
+        document.getElementById('upgrade-screen').style.display = 'none';
+
+        startNextWave();
+    }
+    
+    // --- 初期化ロジック (HTML読み込み後に実行) ---
+    document.addEventListener('DOMContentLoaded', () => {
+        // キャンバスの初期化
+        canvas = document.getElementById('gameCanvas');
+        ctx = canvas.getContext('2d');
+        W = canvas.width;
+        H = canvas.height;
+        
+        // プレイヤーの初期化
+        player = {
+            x: W / 2,
+            y: H / 2,
+            radius: 7.5,     
+            health: 100,
+            color: 'yellow'
+        };
+        
+        // マウス位置の初期化
+        mousePos = { x: W / 2, y: H / 2 };
+
+        // イベントリスナーの初期化
+        const damageButton = document.getElementById('upgrade-damage');
+        const speedButton = document.getElementById('upgrade-speed');
+        const healthButton = document.getElementById('upgrade-health');
+        const weaponButton = document.getElementById('upgrade-weapon');
+        const restartButton = document.getElementById('restart-button');
+        
+        // キーボード・マウスイベントリスナー
+        document.addEventListener('keydown', (e) => { keys[e.code] = true; });
+        document.addEventListener('keyup', (e) => { keys[e.code] = false; });
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mousePos.x = e.clientX - rect.left;
+            mousePos.y = e.clientY - rect.top;
+        });
+
+        // ボタンイベントリスナー (重複登録防止)
+        if (restartButton) restartButton.addEventListener('click', startGame);
+
+        // アップグレードボタンのリスナーは、DOMがロードされた後一度だけ設定
+        if (damageButton && !damageButton.dataset.listenerAttached) {
+            damageButton.addEventListener('click', () => applyUpgrade('damage'));
+            speedButton.addEventListener('click', () => applyUpgrade('speed'));
+            healthButton.addEventListener('click', () => applyUpgrade('health'));
+            
+            if (weaponButton) weaponButton.addEventListener('click', applyWeaponUpgrade);
+            
+            damageButton.dataset.listenerAttached = 'true';
+        }
+        
+        // ゲーム開始
+        startGame();
+    });
+</script>
+
+</body>
+</html>
