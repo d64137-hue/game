@@ -467,9 +467,10 @@
                 TradePost: [], 
                 ContractOffice: [], 
             },
+            // ★ここを修正しました★
             upgrades: {
                 productionEfficiency: 0, warehouseCapacity: 0, marketStability: 0,
-                // ★ NEW RESEARCH ITEMS
+                // ★ NEW RESEARCH ITEMS - エラー原因の項目
                 prestigeBoost: 0, // プレステージ通貨獲得量アップ
                 autoSellEfficiency: 0, // 自動売却時の利益率アップ
                 loanInterestMitigation: 0, // ローン利子軽減
@@ -551,6 +552,16 @@
                 displayName: '利子軽減策', maxLevel: 5, baseCost: 8000, costMultiplier: 2.0,
                 effect: (level) => `ローン利子発生率を ${(level * 15)}% 軽減`,
                 getCost: (level) => Math.ceil(GLOBAL_UPGRADES.loanInterestMitigation.baseCost * Math.pow(GLOBAL_UPGRADES.loanInterestMitigation.costMultiplier, level))
+            },
+            researchSpeed: { 
+                displayName: '研究コスト削減', maxLevel: 5, baseCost: 3000, costMultiplier: 1.6,
+                effect: (level) => `研究コストが ${(level * 5)}% 削減`,
+                getCost: (level) => Math.ceil(GLOBAL_UPGRADES.researchSpeed.baseCost * Math.pow(GLOBAL_UPGRADES.researchSpeed.costMultiplier, level))
+            },
+            advancedMaterials: { 
+                displayName: '上級素材生産効率', maxLevel: 5, baseCost: 12000, costMultiplier: 2.2,
+                effect: (level) => `上級加工品の生産量が ${(level * 10)}% 増加`,
+                getCost: (level) => Math.ceil(GLOBAL_UPGRADES.advancedMaterials.baseCost * Math.pow(GLOBAL_UPGRADES.advancedMaterials.costMultiplier, level))
             }
         };
 
@@ -1029,7 +1040,11 @@
             // 1A. ローンパネルの更新
             const loanStatusDiv = document.getElementById('loan-panel-status');
             const repayButton = document.getElementById('repay-loan-button');
-            const interestRateDisplay = (LOAN_INTEREST_RATE * TICKS_PER_MINUTE * (1.0 - stats.upgrades.loanInterestMitigation * 0.15) * 100).toFixed(4);
+            
+            // ★ FIX: interestMultiplierを使用する際にupgradesオブジェクトが正しく初期化されていることを前提とする
+            const mitigationLevel = stats.upgrades.loanInterestMitigation || 0;
+            const interestMultiplier = 1.0 - mitigationLevel * 0.15;
+            const interestRateDisplay = (LOAN_INTEREST_RATE * TICKS_PER_MINUTE * interestMultiplier * 100).toFixed(4);
             
             if (stats.loan > 0) {
                  loanStatusDiv.innerHTML = `借入額: <span style="color: #FF7043;">${stats.loan.toFixed(0)}G</span> (利子約${interestRateDisplay}\%/分)`;
@@ -1127,7 +1142,7 @@
                     researchDiv.style.borderRadius = '5px';
                     
                     // ★ NEW: 研究コスト削減研究の反映
-                    const researchCostReduction = stats.upgrades.researchSpeed * 0.05; // 5% per level
+                    const researchCostReduction = (stats.upgrades.researchSpeed || 0) * 0.05; // 5% per level
                     const finalCost = Math.ceil(cost * (1.0 - researchCostReduction));
 
                     researchDiv.innerHTML = `
@@ -1393,7 +1408,7 @@
             const currentLevel = stats.upgrades[key];
             const cost = spec.getCost(currentLevel);
             
-            const researchCostReduction = stats.upgrades.researchSpeed * 0.05; 
+            const researchCostReduction = (stats.upgrades.researchSpeed || 0) * 0.05; 
             const finalCost = Math.ceil(cost * (1.0 - researchCostReduction));
 
             if (stats.gold >= finalCost && currentLevel < spec.maxLevel) {
@@ -1573,7 +1588,7 @@
         function prestigeReset() {
             const totalAssets = stats.gold + stats.investment + stats.loan;
             const prestigeBoostLevel = stats.upgrades.prestigeBoost;
-            const prestigeBoost = 1.0 + prestigeBoostLevel * 0.1;
+            const prestigeBoost = 1.0 + prestigeBoostLevel * 0.1; // 10% per level
             
             let prestigeGain = Math.floor(Math.log10(totalAssets / 100000) * 10) * 10 * prestigeBoost; 
             prestigeGain = Math.floor(Math.max(0, prestigeGain));
