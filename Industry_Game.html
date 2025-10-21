@@ -1,999 +1,1643 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>シンプル工業シミュレーション — フル改良版</title>
-<style>
-/* ===== 全体レイアウト ===== */
-:root{
-  --bg:#121217; --panel:#1e1e28; --muted:#9aa0b4; --accent:#76FF03;
-  --card:#171722; --btn:#FFB74D; --danger:#FF7043;
-}
-*{box-sizing:border-box}
-html,body{height:100%;margin:0;font-family: "Noto Sans JP", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;}
-body{background:linear-gradient(180deg,#0f0f13, #10101a); color:#E6EEF3; padding:12px;}
+    <meta charset="UTF-8">
+    <title>シンプル工業シミュレーション (v12.0 - UI/機能拡張版)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        /* =========================================================================
+           基本スタイルとUIリニューアル (要望: 2, 7, 12, 17)
+           ========================================================================= */
+        body { 
+            background: #121212; /* 濃いダークテーマ */
+            color: #E0E0E0; 
+            text-align: center; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            padding-top: 15px; 
+            padding-bottom: 50px; 
+        }
+        h1 {
+            color: #4CAF50; /* 緑 */
+            margin-bottom: 15px;
+            font-size: 1.8em;
+            text-shadow: 1px 1px 2px #000;
+        }
+        #GameArea {
+            max-width: 900px; 
+            margin: 0 auto;
+            padding: 15px;
+            border: 1px solid #333;
+            border-radius: 12px;
+            background: #1E1E1E;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+        }
 
-/* Container */
-#GameArea{max-width:1100px;margin:0 auto;padding:14px;border-radius:12px;background:linear-gradient(180deg,#111118 0%, #161624 100%); box-shadow:0 8px 30px rgba(0,0,0,0.6); border:1px solid rgba(255,255,255,0.03);}
+        /* --- ステータスパネル --- */
+        #status-panel { 
+            background: #282828; 
+            padding: 10px; 
+            margin-bottom: 15px; 
+            border-radius: 8px; 
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            text-align: center;
+        }
+        .status-box {
+            background: #333;
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 1.1em;
+            font-weight: 600;
+        }
+        .status-box .label {
+            display: block;
+            font-size: 0.8em;
+            color: #9E9E9E;
+            margin-bottom: 2px;
+        }
+        #gold-display, #investment-display, #prestige-currency-display {
+            color: #FFC107; /* 資金は黄色 */
+            transition: color 0.1s ease;
+        }
+        .flash-positive { color: #4CAF50 !important; } /* 緑にフラッシュ */
+        .flash-negative { color: #F44336 !important; } /* 赤にフラッシュ */
+        
+        /* --- ローン/クイックアクション --- */
+        #auxiliary-status {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            font-size: 0.9em;
+            padding: 0 5px;
+        }
+        #loan-panel {
+            background: #424242; 
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 0.9em;
+            display: flex;
+            align-items: center;
+        }
+        .loan-action-button, .quick-sell-button {
+            padding: 4px 8px;
+            background-color: #FFC107;
+            color: #1E1E1E;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.8em;
+            margin-left: 5px;
+            transition: background-color 0.2s;
+        }
+        .loan-action-button:disabled, .quick-sell-button:disabled {
+             background-color: #555;
+             color: #aaa;
+             cursor: not-allowed;
+        }
+        
+        /* --- タブコンテナ --- */
+        #tabs {
+            display: flex;
+            border-bottom: 1px solid #444;
+        }
+        .tab-button {
+            flex-grow: 1;
+            padding: 12px 0;
+            cursor: pointer;
+            background: #333;
+            color: #9E9E9E;
+            border: none;
+            font-size: 1.0em;
+            transition: background 0.3s;
+        }
+        .tab-button:hover:not(.active) {
+            background: #444;
+        }
+        .tab-button.active {
+            background: #1E1E1E;
+            color: #4CAF50;
+            font-weight: bold;
+            border-bottom: 3px solid #4CAF50;
+        }
+        .tab-content {
+            padding: 15px;
+            min-height: 400px; 
+            text-align: left;
+            background: #1E1E1E;
+            border-radius: 0 0 8px 8px;
+        }
 
-/* Header */
-.header{display:flex;align-items:center;gap:12px}
-h1{margin:0;font-size:20px;color:var(--accent)}
-.version{font-size:12px;color:var(--muted);margin-left:6px}
+        /* --- 建設パネル --- */
+        #build-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .building-card {
+            background: #282828;
+            padding: 10px;
+            border-radius: 6px;
+            border-left: 4px solid #4CAF50;
+            position: relative;
+        }
+        .building-info { font-size: 0.9em; color: #BBB; }
+        .building-info strong { color: #E0E0E0; }
+        .building-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 8px;
+        }
+        .build-button, .sell-building-button {
+            padding: 6px 12px;
+            font-size: 0.9em;
+            font-weight: bold;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .build-button {
+            background-color: #4CAF50; /* 緑 */
+            color: #1E1E1E;
+        }
+        .sell-building-button {
+            background-color: #F44336; /* 赤 */
+            color: white;
+            padding: 4px 8px;
+            font-size: 0.8em;
+            margin-left: 5px;
+        }
+        .upgrade-button {
+            background-color: #2196F3;
+            color: white;
+            padding: 4px 8px;
+            font-size: 0.8em;
+            margin-top: 5px;
+            display: block;
+        }
+        .upgrade-button:disabled { background-color: #555; }
 
-/* Status Panel */
-#status-panel{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;margin-top:12px;background:var(--panel);padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.03)}
-.status-block{display:flex;gap:10px;align-items:center;font-size:14px}
-.status-block strong{color:#fff}
-.badge{background:#22222a;padding:4px 8px;border-radius:6px;font-weight:700}
-.small{font-size:12px;color:var(--muted)}
+        /* --- 生産レート詳細 (6, 16) --- */
+        #production-status {
+             background: #282828;
+             padding: 10px;
+             border-radius: 6px;
+             margin-bottom: 15px;
+             font-size: 0.9em;
+        }
+        .prod-line {
+             display: grid;
+             grid-template-columns: 2fr 1fr 1fr;
+             padding: 3px 0;
+             border-bottom: 1px dotted #444;
+        }
+        .prod-line:last-child { border-bottom: none; }
+        .prod-rate { color: #FFC107; font-weight: bold;}
+        .prod-stalled { color: #F44336;}
 
-/* Tabs */
-#tab-container{margin-top:12px;border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,0.03)}
-#tabs{display:flex;background:#13131a;border-bottom:1px solid rgba(255,255,255,0.03)}
-.tab-button{flex:1;padding:10px 12px;cursor:pointer;background:transparent;border:none;color:var(--muted);font-weight:600}
-.tab-button.active{color:var(--accent);background:linear-gradient(90deg, rgba(255,255,255,0.02), transparent);box-shadow:inset 0 -3px 0 rgba(118,255,3,0.08)}
-.tab-content{padding:12px;background:transparent;display:none;color:#dfe7f2}
+        /* --- 資源パネル (5, 15) --- */
+        .resource-category h3 {
+            border-bottom: 2px solid #666;
+            padding-bottom: 5px;
+            margin-top: 20px;
+            color: #9E9E9E;
+        }
+        .resource-item {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr; 
+            gap: 10px;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px dotted #333;
+        }
+        .resource-name { font-weight: bold; color: #4CAF50; font-size: 1em; }
+        .price-info { font-size: 0.9em; color: #E0E0E0;}
+        .sell-actions { 
+            display: flex; 
+            align-items: center; 
+            justify-content: flex-end;
+        }
+        .price-change { margin-left: 5px; font-weight: bold; }
+        .price-up { color: #76FF03; }
+        .price-down { color: #FF7043; }
+        .sell-button {
+            background-color: #FFC107;
+            color: #1E1E1E;
+            padding: 5px 10px;
+        }
 
-/* Panels & columns */
-.row{display:flex;gap:12px}
-.col{flex:1;min-width:200px}
-.panel{background:linear-gradient(180deg,#0f1114,#14141a);padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.02)}
+        /* --- 情報/ヘルプパネル (3, 13) --- */
+        #tab-info h3 {
+            color: #2196F3;
+            border-bottom: 1px dashed #444;
+            padding-bottom: 5px;
+            margin-top: 20px;
+        }
+        .info-card {
+            background: #282828;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            font-size: 0.9em;
+        }
+        .info-card strong { color: #FFC107; }
+        .recipe-list {
+            list-style: none;
+            padding-left: 15px;
+        }
+        .recipe-list li {
+            margin-bottom: 5px;
+        }
 
-/* Resource list */
-.resource-item{display:grid;grid-template-columns: 1fr auto auto;gap:8px;align-items:center;padding:6px;border-radius:6px}
-.resource-name{font-weight:700;color:#FFEB3B}
-.resource-meta{font-size:13px;color:var(--muted)}
+        /* --- 実績/転生パネル (7, 10, 17, 20) --- */
+        .achievement-item {
+            border: 1px solid #333;
+            padding: 8px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            background: #282828; 
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .achievement-item.achieved {
+            border-left: 5px solid #4CAF50;
+            background: #233A24; 
+        }
+        .achievement-item.locked {
+            border-left: 5px solid #555;
+            color: #aaa;
+        }
+        
+        #ranking-panel {
+            background: #333;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 6px;
+        }
+        #ranking-list {
+            list-style: none;
+            padding: 0;
+        }
+        #ranking-list li {
+            background: #282828;
+            margin-bottom: 5px;
+            padding: 8px;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            font-weight: bold;
+        }
+        .rank-1 { color: gold; }
+        .rank-2 { color: silver; }
+        .rank-3 { color: #CD7F32; }
 
-/* Buttons */
-.button{padding:6px 10px;border-radius:6px;border:none;background:var(--btn);color:#1b1b1b;font-weight:700;cursor:pointer}
-.button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)}
-.button.small{padding:4px 8px;font-size:13px}
 
-/* Build grid */
-.build-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
-.build-card{background:linear-gradient(180deg,#0f1320,#12121a);padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.02);display:flex;flex-direction:column;gap:8px;min-height:92px}
-.build-title{font-weight:800}
-.build-meta{font-size:13px;color:var(--muted)}
+        /* --- メッセージエリア --- */
+        #message-area { 
+            margin-top: 15px; 
+            padding: 8px;
+            border-radius: 6px;
+            min-height: 20px;
+            font-weight: bold;
+            color: #FFC107;
+            background-color: #282828;
+            transition: background-color 0.2s ease;
+        }
+        .msg-achieve { background-color: #4CAF50 !important; color: #1E1E1E !important; }
+        .msg-loan { background-color: #F44336 !important; color: white !important; }
 
-/* Research */
-.research-grid{display:flex;flex-wrap:wrap;gap:8px}
-.research-card{width:220px;padding:8px;border-radius:8px;background:linear-gradient(180deg,#0f1420,#11111a);border:1px solid rgba(255,255,255,0.02)}
-.research-card.locked{opacity:0.5}
-
-/* Achievements */
-.ach-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
-.ach-card{padding:8px;border-radius:8px;background:#08110a;border:1px solid rgba(118,255,3,0.08);color:#dfffd8}
-
-/* Production table */
-.prod-table{width:100%;border-collapse:collapse;margin-top:6px}
-.prod-table th,.prod-table td{padding:6px;border-bottom:1px dashed rgba(255,255,255,0.03);font-size:13px;text-align:left}
-
-/* Tooltip */
-.tooltip{position:relative}
-.tooltip .tip{position:absolute;left:0;top:calc(100% + 6px);background:#0b0b10;color:#fff;padding:8px;border-radius:6px;font-size:13px;display:none;width:260px;z-index:60;box-shadow:0 6px 20px rgba(0,0,0,0.6)}
-.tooltip:hover .tip{display:block}
-
-/* Animations */
-.anim-run{animation:runningLight 1.2s infinite}
-@keyframes runningLight{0%{box-shadow:0 0 0 rgba(118,255,3,0)}50%{box-shadow:0 6px 20px rgba(118,255,3,0.06)}100%{box-shadow:0 0 0 rgba(118,255,3,0)}}
-
-/* Message area */
-#message-area{margin-top:12px;padding:10px;border-radius:6px;background:#0a0a0f;color:#fff;min-height:36px;border:1px solid rgba(255,255,255,0.02)}
-.msg-good{color:#000;background:#76FF03;padding:6px;border-radius:6px}
-.msg-bad{color:#fff;background:#FF7043;padding:6px;border-radius:6px}
-
-/* Responsive */
-@media (max-width:880px){
-  .row{flex-direction:column}
-  .build-grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
-}
-</style>
+        /* 全てのボタンの基本スタイル */
+        button {
+            transition: background-color 0.1s, transform 0.05s;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+    </style>
 </head>
 <body>
-<div id="GameArea">
-  <div class="header">
-    <h1>シンプル工業シミュレーション</h1>
-    <div class="version">フル改良版</div>
-  </div>
+    <div id="GameArea">
+        <h1>シンプル工業シミュレーション (v12.0)</h1>
 
-  <div id="status-panel">
-    <div class="status-block">
-      <div>資金: <span id="gold-display" class="badge">1000</span></div>
-      <div>投資: <span id="investment-display" class="badge">0</span></div>
-      <div id="loan-panel" style="margin-left:10px">借入: <span id="loan-display" class="badge">0</span></div>
-    </div>
-    <div class="status-block">
-      <div>Ticks: <span id="tick-display" class="small">0</span></div>
-      <div>在庫上限: <span id="stock-limit-display" class="small">1000</span></div>
-      <div>プレステージ: <span id="prestige-currency-display" class="badge">0</span></div>
-    </div>
-  </div>
+        <div id="status-panel">
+            <div class="status-box"><span class="label">資金 (Gold)</span><span id="gold-display">1000</span></div>
+            <div class="status-box"><span class="label">投資額</span><span id="investment-display">0</span>G</div> 
+            <div class="status-box"><span class="label">プレステージ通貨</span><span id="prestige-currency-display">0</span> ⭐</div>
+        </div>
+        
+        <div id="auxiliary-status">
+             <div style="color: #9E9E9E;">
+                稼働時間 (Ticks): <span id="tick-display">0</span>
+                | **在庫上限**: <span id="stock-limit-display">1000</span>
+             </div>
 
-  <div id="tab-container">
-    <div id="tabs">
-      <button class="tab-button active" onclick="switchTab('build')">🛠 建設</button>
-      <button class="tab-button" onclick="switchTab('resource')">📦 資源・市場</button>
-      <button class="tab-button" onclick="switchTab('research')">🔬 研究</button>
-      <button class="tab-button" onclick="switchTab('achievement')">🏆 実績</button>
-    </div>
-
-    <div id="tab-build" class="tab-content" style="display:block">
-      <div class="row">
-        <div class="col panel">
-          <h3>建設と生産</h3>
-          <div style="margin-bottom:8px">
-            購入数:
-            <button class="button small" onclick="setBuildingCountMultiplier(1)" id="mb-1">x1</button>
-            <button class="button small" onclick="setBuildingCountMultiplier(10)" id="mb-10">x10</button>
-            <button class="button small" onclick="setBuildingCountMultiplier(100)" id="mb-100">x100</button>
-            <button class="button small" onclick="setBuildingCountMultiplier('max')" id="mb-max">MAX</button>
-          </div>
-          <div id="build-buttons" class="build-grid"></div>
+             <div id="loan-panel">
+                <div id="loan-panel-status">借入額: 0G</div>
+                <button class="loan-action-button" onclick="takeLoan(10000)">1万G借入</button>
+                <button class="loan-action-button" id="repay-loan-button" onclick="repayLoan()">全額返済</button>
+            </div>
+        </div>
+        
+        <div id="quick-actions" style="margin-bottom: 15px; text-align: right;">
+            <button class="quick-sell-button" id="qs-wafer" onclick="sellResource('wafer')">ウェハ売却</button>
+            <button class="quick-sell-button" id="qs-alloy" onclick="sellResource('alloy')">合金売却</button>
+            <button class="quick-sell-button" id="sell-all-button" onclick="sellAllResources()">全売却</button>
         </div>
 
-        <div class="col panel">
-          <h3>生産状況</h3>
-          <div id="buildings-status" style="font-size:13px"></div>
-          <h4 style="margin-top:8px">生産レート (毎分)</h4>
-          <div id="production-rates" class="small"></div>
-          <h4 style="margin-top:8px">建物稼働アニメ</h4>
-          <div style="font-size:13px;color:var(--muted)">稼働中の建物は緑の光で点滅します。</div>
-        </div>
-      </div>
 
-      <div style="margin-top:8px" class="panel">
-        <h3>市場投資</h3>
-        <div id="investment-panel">
-          <div>現在の投資: <span id="investment-status">0</span>G</div>
-          <div class="small">投資はランダム変動します（研究で安定化可能）</div>
-          <div style="margin-top:6px;display:flex;gap:8px">
-            <input type="number" id="invest-amount" value="1000" min="100" style="padding:6px;border-radius:6px;background:#0c0c10;border:1px solid rgba(255,255,255,0.02);color:#fff">
-            <button class="button" onclick="investMoney(document.getElementById('invest-amount').value)">投資</button>
-            <button class="button ghost" onclick="withdrawInvestment()">回収</button>
-          </div>
+        <div id="tab-container">
+            <div id="tabs">
+                <button class="tab-button active" onclick="switchTab('build')">🛠️ 建設</button>
+                <button class="tab-button" onclick="switchTab('resource')">📦 資源・市場</button>
+                <button class="tab-button" onclick="switchTab('research')">🔬 研究</button>
+                <button class="tab-button" onclick="switchTab('achievement')">🏆 転生・実績</button>
+                <button class="tab-button" onclick="switchTab('info')">ℹ️ 情報・ヘルプ</button>
+            </div>
+
+            <div id="tab-build" class="tab-content">
+                <h2>🛠️ 建物建設</h2>
+                
+                <div id="production-status">
+                    <h3>🏭 建物稼働状況と生産レート (毎分生産数: PPM)</h3>
+                    <div id="prod-rate-details">稼働中の設備がありません。</div>
+                </div>
+
+                <div id="investment-panel" style="background: #333; padding: 10px; border-radius: 6px; margin-bottom: 15px;">
+                    <h3>💰 市場投資</h3>
+                    <div id="investment-status">現在、0Gを投資中。</div>
+                    <div class="invest-rate" style="font-size: 0.85em; color: #9E9E9E;">毎ティック $\pm 0.5\%$ 程度のランダム変動があります。</div>
+                    <div class="investment-action">
+                        <input type="number" id="invest-amount" value="1000" min="100" style="padding: 5px; background: #1E1E1E; border: 1px solid #555; color: white; border-radius: 4px;">
+                        <button class="invest-button" onclick="investMoney(document.getElementById('invest-amount').value)">投資</button>
+                        <button class="invest-button" onclick="withdrawInvestment()">全額回収</button>
+                    </div>
+                </div>
+                
+                <div id="multi-buy-options" style="display: flex; justify-content: center; align-items: center; margin-bottom: 10px; background: #282828; padding: 5px; border-radius: 4px;">
+                    <p style="margin-right: 15px; font-weight: bold; font-size: 0.9em;">購入数:</p>
+                    <button class="multi-buy-button selected" data-count="1" onclick="setBuildingCountMultiplier(1)">x1</button>
+                    <button class="multi-buy-button" data-count="10" onclick="setBuildingCountMultiplier(10)">x10</button>
+                    <button class="multi-buy-button" data-count="100" onclick="setBuildingCountMultiplier(100)">x100</button>
+                    <button class="multi-buy-button" data-count="max" onclick="setBuildingCountMultiplier('max')">MAX</button>
+                </div>
+                
+                <div id="build-buttons">
+                    </div>
+
+            </div>
+
+            <div id="tab-resource" class="tab-content" style="display:none;">
+                <h2>📦 資源在庫 (市場価格)</h2>
+                <div id="stock-limit-info" style="font-size: 0.9em; color: #4CAF50; margin-bottom: 15px;"></div>
+                <div id="resource-list">
+                    </div>
+            </div>
+
+            <div id="tab-research" class="tab-content" style="display:none;">
+                <h2>🔬 研究開発</h2>
+                <div id="research-list">
+                    </div>
+            </div>
+
+             <div id="tab-achievement" class="tab-content" style="display:none;">
+                <h2>🏆 実績 (<span id="achieved-count">0</span> / <span id="total-achievements">0</span>)</h2>
+                <div id="achievement-panel-container"></div>
+                
+                <div id="prestige-panel" style="border: 1px solid #FFC107; padding: 15px; margin-top: 20px; border-radius: 5px; background: #323232;">
+                    <h3>⭐ プレステージ (転生)</h3>
+                    <p>このゲームをリセットして、進捗に応じた**プレステージ通貨**を獲得します。</p>
+                    <p style="font-weight: bold; font-size: 1.1em;">獲得可能通貨: <span id="prestige-gain-display">0</span> ⭐</p>
+                    <p style="font-size: 0.8em; color: #ddd;">(条件: 資金総額100,000G以上)</p>
+                    <button id="prestige-button" onclick="prestigeReset()" style="padding: 10px 20px; font-size: 1.1em; background-color: #FFC107; color: black; font-weight: bold; cursor: pointer; border: none; border-radius: 4px;">プレステージ実行</button>
+                </div>
+
+                <div id="ranking-panel">
+                    <h3>🏅 トップランキング (ローカル)</h3>
+                    <ul id="ranking-list">
+                        </ul>
+                </div>
+
+            </div>
+            
+            <div id="tab-info" class="tab-content" style="display:none;">
+                <h2>ℹ️ 情報・ヘルプ</h2>
+                <div class="info-card">
+                    <strong>操作方法:</strong> 矢印キーや WASD などはありません。マウス（またはタップ）で建物をクリックして建設し、自動生産を見守りましょう。資金が増えたら新しい設備を開発し、市場で資源を売却します。
+                </div>
+                
+                <h3>建物一覧とレシピ</h3>
+                <div id="building-info-list">
+                    </div>
+            </div>
+
+
         </div>
-      </div>
+        
+        <div id="message-area">ゲーム開始！採掘所を建てて資源を集めよう。</div>
 
     </div>
+    
+    <script>
+        // --- ゲーム状態変数 ---
+        let stats = {
+            gold: 1000,
+            investment: 0, 
+            loan: 0, 
+            prestige_currency: 0, 
+            tick: 0,
+            buildingCountMultiplier: 1, 
+            resources: {
+                ore: 0, copper_ore: 0, coal_ore: 0, alum_ore: 0, silicon_ore: 0, titan_ore: 0, 
+                iron: 0, copper_wire: 0, steel_copper: 0, alum: 0, wafer: 0, alloy: 0, 
+            },
+            buildings: {
+                Mine: [], CopperMine: [], CoalMine: [], AluminumMine: [], SiliconMine: [], TitaniumMine: [], 
+                Smelter: [], WireMill: [], SteelMill: [], AdvancedSmelter: [], 
+                AluminumSmelter: [], WaferFab: [], AlloyForge: [], 
+                AdvMine: [],
+                AutoTransporter: [], 
+                Warehouse: [], 
+                TradePost: [], 
+                ContractOffice: [], 
+            },
+            upgrades: {
+                productionEfficiency: 0, warehouseCapacity: 0, marketStability: 0,
+                // ★ NEW RESEARCH ITEMS
+                prestigeBoost: 0, // プレステージ通貨獲得量アップ
+                autoSellEfficiency: 0, // 自動売却時の利益率アップ
+                loanInterestMitigation: 0, // ローン利子軽減
+                researchSpeed: 0, // 研究コスト削減
+                advancedMaterials: 0, // 上級素材の生産効率アップ
+            },
+            market: {
+                priceAdjustment: {
+                    ore: 0, copper_ore: 0, coal_ore: 0, alum_ore: 0, silicon_ore: 0, titan_ore: 0, 
+                    iron: 0, copper_wire: 0, steel_copper: 0, alum: 0, wafer: 0, alloy: 0, 
+                },
+                marketFluctuation: 1.0, 
+            },
+            achievements: { 
+                first_build: false, max_1k_gold: false, max_10k_gold: false, max_100k_gold: false,
+                iron_master: false, wafer_creator: false, all_mines: false, adv_mine_upgrade: false
+            }
+        };
+        
+        // --- 定数 ---
+        const TICK_RATE_MS = 100; 
+        const TICKS_PER_MINUTE = 60000 / TICK_RATE_MS; 
+        const BASE_STOCK_LIMIT = 1000; 
+        // ★ NEW/FIX: ローン利子を1/10に軽減 (0.0005 -> 0.00005) (要望: 4, 14)
+        const LOAN_INTEREST_RATE = 0.00005; // 0.005% per tick (~3% per minute)
+        const SELL_BUILDING_RATE = 0.8; // 建物の売却率 (要望: 9, 19)
 
-    <div id="tab-resource" class="tab-content">
-      <div class="row">
-        <div class="col panel">
-          <h3>資源一覧（カテゴリ別）</h3>
-          <div style="display:flex;gap:8px;margin-bottom:8px">
-            <button class="button small" onclick="filterResource('all')">全て</button>
-            <button class="button small" onclick="filterResource('raw')">原料</button>
-            <button class="button small" onclick="filterResource('intermediate')">加工品</button>
-            <button class="button small" onclick="filterResource('advanced')">上位加工</button>
-          </div>
-          <div id="resource-list"></div>
-          <div id="total-stock-info" class="small" style="margin-top:8px"></div>
-        </div>
+        const BASE_RESOURCE_PRICES = {
+            ore: 5, copper_ore: 8, coal_ore: 10, alum_ore: 12, silicon_ore: 15, titan_ore: 20,
+            iron: 20, copper_wire: 40, steel_copper: 80, alum: 35, wafer: 100, alloy: 150,
+        };
+        
+        const RESOURCE_NAMES = {
+            ore: '鉄鉱石', copper_ore: '銅鉱石', coal_ore: '石炭', alum_ore: 'アルミ鉱石', silicon_ore: 'シリコン鉱石', titan_ore: 'チタン鉱石',
+            iron: '鉄', copper_wire: '銅線', steel_copper: '鉄鋼銅', alum: 'アルミニウム', wafer: 'シリコンウェハ', alloy: 'チタン合金'
+        };
 
-        <div class="col panel">
-          <h3>販売 / 購入 履歴</h3>
-          <div id="trade-log" style="max-height:260px;overflow:auto;font-size:13px;color:var(--muted)"></div>
-          <div style="margin-top:8px">
-            <button class="button small" onclick="sellAllResources()">全売却</button>
-            <button class="button small" onclick="autoSellAll()">自動売却ON/OFF</button>
-          </div>
-        </div>
-      </div>
-    </div>
+        const RESOURCE_UNITS = {
+            ore: '個', copper_ore: '個', coal_ore: '個', alum_ore: '個', silicon_ore: '個', titan_ore: '個',
+            iron: '個', copper_wire: 'm', steel_copper: '塊', alum: '塊', wafer: '枚', alloy: '塊'
+        };
+        
+        // ★ NEW: 資源カテゴリ定義 (要望: 5, 15)
+        const RESOURCE_CATEGORIES = {
+            '原料 (Raw)': ['ore', 'copper_ore', 'coal_ore', 'alum_ore', 'silicon_ore', 'titan_ore'],
+            '中間加工品 (Intermediate)': ['iron', 'copper_wire', 'steel_copper', 'alum'],
+            '上級加工品 (Advanced)': ['wafer', 'alloy'],
+        };
+        
+        // 研究アップグレード定義 (要望: 1, 11)
+        const GLOBAL_UPGRADES = {
+            productionEfficiency: {
+                displayName: '生産技術向上', maxLevel: 10, baseCost: 1000, costMultiplier: 1.5,
+                effect: (level) => `生産速度が ${(level * 5)}% 向上`,
+                getCost: (level) => Math.ceil(GLOBAL_UPGRADES.productionEfficiency.baseCost * Math.pow(GLOBAL_UPGRADES.productionEfficiency.costMultiplier, level))
+            },
+            warehouseCapacity: {
+                displayName: '倉庫容量拡張', maxLevel: 5, baseCost: 5000, costMultiplier: 2.0,
+                effect: (level) => `倉庫による容量増加量が ${level*50}% 向上`,
+                getCost: (level) => Math.ceil(GLOBAL_UPGRADES.warehouseCapacity.baseCost * Math.pow(GLOBAL_UPGRADES.warehouseCapacity.costMultiplier, level))
+            },
+            marketStability: { 
+                displayName: '市場安定化技術', maxLevel: 5, baseCost: 1500, costMultiplier: 1.8,
+                effect: (level) => `プレイヤーの売却による価格下落を ${(level * 10)}% 軽減`,
+                getCost: (level) => Math.ceil(GLOBAL_UPGRADES.marketStability.baseCost * Math.pow(GLOBAL_UPGRADES.marketStability.costMultiplier, level))
+            },
+            // ★ NEW RESEARCH ★
+            prestigeBoost: {
+                displayName: 'プレステージ効率化', maxLevel: 5, baseCost: 10000, costMultiplier: 2.5,
+                effect: (level) => `プレステージ通貨獲得量が ${(level * 10)}% 増加`,
+                getCost: (level) => Math.ceil(GLOBAL_UPGRADES.prestigeBoost.baseCost * Math.pow(GLOBAL_UPGRADES.prestigeBoost.costMultiplier, level))
+            },
+            autoSellEfficiency: {
+                displayName: '自動化利益向上', maxLevel: 10, baseCost: 500, costMultiplier: 1.4,
+                effect: (level) => `自動取引所と契約オフィスの利益が ${(level * 5)}% 向上`,
+                getCost: (level) => Math.ceil(GLOBAL_UPGRADES.autoSellEfficiency.baseCost * Math.pow(GLOBAL_UPGRADES.autoSellEfficiency.costMultiplier, level))
+            },
+            loanInterestMitigation: {
+                displayName: '利子軽減策', maxLevel: 5, baseCost: 8000, costMultiplier: 2.0,
+                effect: (level) => `ローン利子発生率を ${(level * 15)}% 軽減`,
+                getCost: (level) => Math.ceil(GLOBAL_UPGRADES.loanInterestMitigation.baseCost * Math.pow(GLOBAL_UPGRADES.loanInterestMitigation.costMultiplier, level))
+            }
+        };
 
-    <div id="tab-research" class="tab-content">
-      <div class="panel">
-        <h3>研究</h3>
-        <div>研究ポイント: <span id="research-points">0</span></div>
-        <div id="ig-research-tree" class="research-grid" style="margin-top:8px"></div>
-      </div>
-      <div class="panel" style="margin-top:8px">
-        <h4>説明</h4>
-        <div>研究は生産効率や市場安定、ローン緩和などゲーム内の多くの効果を与えます。研究は資金で行います。</div>
-      </div>
-    </div>
+        // 建物スペック定義
+        const BUILDING_SPECS = {
+            // 採掘所
+            Mine: { cost: 100, output: { resource: 'ore', amount: 1 }, time: 100, input: null, displayName: '鉄採掘所', description: '最も基本的な資源である鉄鉱石を採掘します。' },
+            CopperMine: { cost: 150, output: { resource: 'copper_ore', amount: 1 }, time: 120, input: null, displayName: '銅採掘所', description: '銅鉱石を採掘します。電線工場で使用します。' },
+            CoalMine: { cost: 180, output: { resource: 'coal_ore', amount: 1 }, time: 70, input: null, displayName: '石炭採掘所', description: '石炭を採掘します。多くの製錬所で使用される重要な燃料です。' },
+            AluminumMine: { cost: 200, output: { resource: 'alum_ore', amount: 1 }, time: 110, input: null, displayName: 'アルミ採掘所', description: 'アルミ鉱石を採掘します。アルミ製錬所で使用します。' }, 
+            SiliconMine: { cost: 250, output: { resource: 'silicon_ore', amount: 1 }, time: 130, input: null, displayName: 'シリコン採掘所', description: 'シリコン鉱石を採掘します。ウェハ工場で使用します。' }, 
+            TitaniumMine: { cost: 300, output: { resource: 'titan_ore', amount: 1 }, time: 150, input: null, displayName: 'チタン採掘所', description: 'チタン鉱石を採掘します。合金鍛造所で最も重要な素材です。' }, 
 
-    <div id="tab-achievement" class="tab-content">
-      <div class="panel">
-        <h3>実績</h3>
-        <div>実績数: <span id="achieved-count">0</span> / <span id="total-achievements">0</span></div>
-        <div id="achievement-panel-container" class="ach-grid" style="margin-top:8px"></div>
-      </div>
-      <div class="panel" style="margin-top:8px">
-        <h3>プレステージ (転生)</h3>
-        <div>獲得可能通貨: <span id="prestige-gain-display">0</span> ⭐</div>
-        <div style="margin-top:6px">
-          <button class="button" id="prestige-button" onclick="prestigeReset()">プレステージ実行</button>
-        </div>
-      </div>
-    </div>
+            // 中間製品工場
+            Smelter: { cost: 250, output: { resource: 'iron', amount: 1 }, time: 150, 
+                input: [{ resource: 'ore', amount: 2 }, { resource: 'coal_ore', amount: 1 }], displayName: '鉄製錬所', description: '鉄鉱石を加工し、鉄を生産します。' }, 
+            WireMill: { cost: 400, output: { resource: 'copper_wire', amount: 1 }, time: 200, 
+                input: [{ resource: 'copper_ore', amount: 2 }, { resource: 'coal_ore', amount: 1 }], displayName: '電線工場', description: '銅鉱石を加工し、銅線を生産します。' }, 
+            SteelMill: { cost: 600, output: { resource: 'steel_copper', amount: 1 }, time: 300, 
+                input: [{ resource: 'ore', amount: 1 }, { resource: 'copper_ore', amount: 1 }, { resource: 'coal_ore', amount: 2 }], displayName: '製鋼所', description: '鉄鉱石、銅鉱石、石炭を混ぜて鉄鋼銅を生産します。' }, 
+            
+            // 上級工場
+            AluminumSmelter: { cost: 350, output: { resource: 'alum', amount: 1 }, time: 180, 
+                input: [{ resource: 'alum_ore', amount: 2 }, { resource: 'coal_ore', amount: 1 }], displayName: 'アルミ製錬所', description: 'アルミ鉱石を加工し、アルミニウムを生産します。' },
+            WaferFab: { cost: 800, output: { resource: 'wafer', amount: 1 }, time: 250, 
+                input: [{ resource: 'silicon_ore', amount: 1 }, { resource: 'coal_ore', amount: 2 }, { resource: 'alum', amount: 1 }], displayName: 'ウェハ工場', description: 'シリコンウェハを生産するハイテク工場です。高額で売却できます。' },
+            AlloyForge: { cost: 1200, output: { resource: 'alloy', amount: 1 }, time: 400, 
+                input: [{ resource: 'titan_ore', amount: 1 }, { resource: 'iron', amount: 1 }, { resource: 'steel_copper', amount: 1 }], displayName: '合金鍛造所', description: 'チタン合金を生産する最終加工施設です。最も高額な製品です。' },
 
-  </div>
+            // 効率の良い工場
+            AdvancedSmelter: { cost: 900, output: { resource: 'steel_copper', amount: 1 }, time: 250,
+                input: [{ resource: 'ore', amount: 1 }, { resource: 'copper_wire', amount: 1 }], displayName: '上級製錬所', description: 'より洗練されたレシピで鉄鋼銅を生産します。' },
 
-  <div id="message-area">ゲーム開始！ 改良版を楽しんでください。</div>
-</div>
 
-<script>
-/* ======================
-   定数・初期パラメータ
-   ====================== */
-const TICK_RATE_MS = 200; // 1 tick = 200ms (5 tick = 1s)
-const TICKS_PER_MINUTE = Math.round(60000 / TICK_RATE_MS);
-const BASE_STOCK_LIMIT = 1000;
-const LOAN_BASE_RATE = 0.0005; // 基本利率/tick
-const LOAN_MAX_RATE = 0.02; // 上限
-const INVEST_BASE_VOLATILITY = 0.01; // 投資の標準変動 (±1%)
-const SELL_PRICE_RATIO = 0.8; // 売却は購入価格の80%
+            // ユーティリティ建物
+            AutoTransporter: { 
+                cost: 1500, output: null, time: 20, 
+                input: null, displayName: '自動搬送機', description: '中間資源（鉄、銅線など）を自動で売却します。'
+            },
+            Warehouse: {
+                cost: 2000, output: null, time: 0,
+                input: null, displayName: '倉庫 (容量拡張)', description: '在庫上限を拡張します。研究で効果が増加します。'
+            },
+            TradePost: { 
+                cost: 5000, output: null, time: 100, 
+                input: null, displayName: '自動取引所', description: '最も高価な上級資源（ウェハ、合金）を自動で売却します。'
+            },
+            ContractOffice: { 
+                cost: 3000, output: null, time: 200, 
+                input: null, displayName: '契約オフィス (安定売却)', description: '資源を市場価格に影響を与えずに、固定の高値で売却します。'
+            },
+            
+            // アップグレード建物
+            AdvMine: { cost: 0, output: { resource: 'ore', amount: 2 }, time: 100, input: null, displayName: '上級鉄採掘所', description: '鉄採掘所をアップグレードし、2倍の鉄鉱石を採掘します。' }
+        };
+        
+        const AUTO_SELL_RESOURCES = ['iron', 'copper_wire', 'steel_copper', 'alum'];
 
-/* ===== 資源データ（カテゴリ） ===== */
-const RESOURCE_META = {
-  ore: {name:'鉄鉱石', unit:'個', category:'raw', basePrice:5},
-  copper_ore: {name:'銅鉱石', unit:'個', category:'raw', basePrice:8},
-  coal_ore: {name:'石炭', unit:'個', category:'raw', basePrice:6},
-  alum_ore: {name:'アルミ鉱石', unit:'個', category:'raw', basePrice:10},
-  silicon_ore: {name:'シリコン鉱石', unit:'個', category:'raw', basePrice:12},
-  titan_ore: {name:'チタン鉱石', unit:'個', category:'raw', basePrice:18},
-  iron: {name:'鉄', unit:'個', category:'intermediate', basePrice:22},
-  copper_wire: {name:'銅線', unit:'m', category:'intermediate', basePrice:40},
-  alum: {name:'アルミ', unit:'塊', category:'intermediate', basePrice:35},
-  steel_copper: {name:'鉄鋼銅', unit:'塊', category:'advanced', basePrice:80},
-  wafer: {name:'ウェハ', unit:'枚', category:'advanced', basePrice:120},
-  alloy: {name:'合金', unit:'塊', category:'advanced', basePrice:160}
-};
+        // 実績定義
+        const ACHIEVEMENT_DEFINITIONS = {
+            first_build: { name: '最初のステップ', description: '任意の建物を1基建設する。', check: () => getTotalBuildings() >= 1 },
+            max_1k_gold: { name: '初期投資家', description: '資金の総額（手持ち＋投資）が1,000Gを超える。', check: () => stats.gold + stats.investment >= 1000 && stats.tick > 10 },
+            max_10k_gold: { name: '中堅企業', description: '資金の総額（手持ち＋投資）が10,000Gを超える。', check: () => stats.gold + stats.investment >= 10000 },
+            max_100k_gold: { name: '大富豪', description: '資金の総額（手持ち＋投資）が100,000Gを超える。', check: () => stats.gold + stats.investment >= 100000 },
+            iron_master: { name: '鉄の基礎', description: '鉄製錬所を10基以上建設する。', check: () => stats.buildings.Smelter.length >= 10 },
+            wafer_creator: { name: 'ハイテク参入', description: 'シリコンウェハを初めて生産する。', check: () => stats.resources.wafer > 0 },
+            all_mines: { name: '全資源制覇', description: '全6種類の採掘所を1基以上建設する。', check: () => ['Mine', 'CopperMine', 'CoalMine', 'AluminumMine', 'SiliconMine', 'TitaniumMine'].every(t => stats.buildings[t].length >= 1) },
+            adv_mine_upgrade: { name: '近代化', description: '上級採掘所を初めて建設する。', check: () => stats.buildings.AdvMine.length > 0 }
+        };
 
-/* ===== 建物仕様（出力・入力） ===== */
-const BUILDING_SPECS = {
-  Mine: {cost:100, displayName:'鉄採掘所', output:{iron:'ore',amount:1}, time:100, input:null},
-  CopperMine: {cost:150, displayName:'銅採掘所', output:{copper_ore:'copper_ore',amount:1}, time:110, input:null},
-  CoalMine: {cost:140, displayName:'石炭採掘所', output:{coal_ore:'coal_ore',amount:1}, time:80, input:null},
-  Smelter: {cost:250, displayName:'鉄製錬所', output:{iron:'iron',amount:1}, time:150, input:[{r:'ore',a:2},{r:'coal_ore',a:1}]},
-  WireMill: {cost:400, displayName:'電線工場', output:{copper_wire:'copper_wire',amount:1}, time:200, input:[{r:'copper_ore',a:2},{r:'coal_ore',a:1}]},
-  SteelMill: {cost:600, displayName:'製鋼所', output:{steel_copper:'steel_copper',amount:1}, time:300, input:[{r:'ore',a:1},{r:'copper_ore',a:1},{r:'coal_ore',a:2}]},
-  AluminumSmelter: {cost:350, displayName:'アルミ製錬所', output:{alum:'alum',amount:1}, time:180, input:[{r:'alum_ore',a:2},{r:'coal_ore',a:1}]},
-  WaferFab: {cost:800, displayName:'ウェハ工場', output:{wafer:'wafer',amount:1}, time:250, input:[{r:'silicon_ore',a:1},{r:'coal_ore',a:2},{r:'alum',a:1}]},
-  AlloyForge: {cost:1200, displayName:'合金鍛造所', output:{alloy:'alloy',amount:1}, time:400, input:[{r:'titan_ore',a:1},{r:'iron',a:1},{r:'steel_copper',a:1}]},
-  AdvancedSmelter: {cost:900, displayName:'上級製錬所', output:{steel_copper:'steel_copper',amount:1}, time:250, input:[{r:'ore',a:1},{r:'copper_wire',a:1}]},
-  AutoTransporter: {cost:1500, displayName:'自動搬送機', output:null, time:20, input:null},
-  Warehouse: {cost:2000,displayName:'倉庫',output:null,time:0,input:null},
-  TradePost: {cost:5000,displayName:'自動取引所',output:null,time:80,input:null},
-  ContractOffice: {cost:3000,displayName:'契約オフィス',output:null,time:200,input:null}
-};
+        let lastGold = stats.gold;
+        let lastResources = {...stats.resources};
+        
+        // --- ユーティリティ関数 ---
 
-/* ===== 初期ゲーム状態 ===== */
-let stats = {
-  gold: 1000,
-  investment: 0,
-  loan: 0,
-  prestige_currency: 0,
-  tick: 0,
-  buildingCountMultiplier: 1,
-  resources: {},
-  buildings: {},
-  upgrades: { productionEfficiency:0, warehouseCapacity:0, marketStability:0, productionSpeed:0, autoTransportEfficiency:0, contractEfficiency:0, investmentStability:0, loanInterestReduction:0, advancedAutomation:0 },
-  achievements: {},
-  market: { priceAdjustment: {}, marketFluctuation: 1.0 },
-  autoSellEnabled: false,
-  questLog: []
-};
-
-/* 初期化：資源と建物配列を作る */
-for(const r in RESOURCE_META) stats.resources[r] = 0;
-for(const b in BUILDING_SPECS) stats.buildings[b] = [];
-
-/* ===== GLOBAL UPGRADES 定義（追加分含む） ===== */
-const GLOBAL_UPGRADES = {
-  productionEfficiency: {displayName:'生産技術向上', maxLevel:10, baseCost:1000, costMultiplier:1.5, effect: lvl => `生産効率 +${lvl*5}%`, getCost: lvl => Math.ceil(1000 * Math.pow(1.5, lvl)) },
-  warehouseCapacity: {displayName:'倉庫容量拡張', maxLevel:10, baseCost:1500, costMultiplier:1.7, effect:lvl=>`倉庫+${lvl*50}%`, getCost: lvl => Math.ceil(1500 * Math.pow(1.7, lvl)) },
-  marketStability: {displayName:'市場安定化', maxLevel:5, baseCost:1500, costMultiplier:1.8, effect:lvl=>`売却ペナルティ -${lvl*10}%`, getCost:lvl=>Math.ceil(1500*Math.pow(1.8,lvl)) },
-  productionSpeed: {displayName:'生産速度改善', maxLevel:5, baseCost:1200, costMultiplier:1.7, effect:lvl=>`生産時間 -${lvl*5}%`, getCost:lvl=>Math.ceil(1200*Math.pow(1.7,lvl)) },
-  autoTransportEfficiency: {displayName:'自動搬送強化', maxLevel:5, baseCost:800, costMultiplier:1.6, effect:lvl=>`自動搬送売却量 +${lvl}`, getCost:lvl=>Math.ceil(800*Math.pow(1.6,lvl)) },
-  contractEfficiency: {displayName:'契約強化', maxLevel:5, baseCost:2000, costMultiplier:1.8, effect:lvl=>`契約売却報酬 +${lvl*10}%`, getCost:lvl=>Math.ceil(2000*Math.pow(1.8,lvl)) },
-  investmentStability: {displayName:'投資安定化', maxLevel:5, baseCost:1500, costMultiplier:1.5, effect:lvl=>`投資変動幅 -${lvl*2}%`, getCost:lvl=>Math.ceil(1500*Math.pow(1.5,lvl)) },
-  loanInterestReduction: {displayName:'ローン利子軽減', maxLevel:5, baseCost:2500, costMultiplier:1.5, effect:lvl=>`利子率 -${(lvl*0.5).toFixed(2)}%`, getCost:lvl=>Math.ceil(2500*Math.pow(1.5,lvl)) },
-  advancedAutomation: {displayName:'高度自動化', maxLevel:5, baseCost:3000, costMultiplier:2.0, effect:lvl=>`自動化速度 +${lvl*20}%`, getCost:lvl=>Math.ceil(3000*Math.pow(2,lvl)) }
-};
-
-/* ===== 実績定義 ===== */
-const ACHIEVEMENT_DEFINITIONS = {
-  first_build: {name:'最初の一歩', desc:'任意の建物を1つ建設する', check: ()=>getTotalBuildings()>=1},
-  earn_1k: {name:'初期投資家', desc:'所持金+投資の合計が1,000Gを超える', check: ()=>stats.gold+stats.investment>=1000 && stats.tick>10},
-  earn_10k: {name:'中堅企業', desc:'総資産が10,000Gを超える', check: ()=>stats.gold+stats.investment>=10000},
-  make_wafer: {name:'ウェハ生産者', desc:'初めてウェハを生産する', check: ()=>stats.resources.wafer>0},
-  build_all_mines: {name:'資源王', desc:'6種の採掘所すべてを1つ以上建設', check: ()=>['Mine','CopperMine','CoalMine','AluminumSmelter','WaferFab','AlloyForge'].every(k=>stats.buildings[k] && stats.buildings[k].length>0)}
-};
-
-/* ===== ヘルパー ===== */
-function formatNum(n){ if(n>=1e9) return (n/1e9).toFixed(2)+'B'; if(n>=1e6) return (n/1e6).toFixed(2)+'M'; if(n>=1000) return (n/1000).toFixed(2)+'K'; return Math.floor(n); }
-function getTotalBuildings(){ return Object.values(stats.buildings).flat().length; }
-function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
-
-/* ======================
-   市場・価格ロジック
-   ====================== */
-function getResourcePrice(key){
-  const meta = RESOURCE_META[key];
-  if(!meta) return 1;
-  const base = meta.basePrice;
-  const fluct = stats.market.marketFluctuation;
-  const adj = 1 + (stats.market.priceAdjustment[key] || 0);
-  const price = Math.max(1, Math.floor(base * fluct * adj));
-  return price;
-}
-
-/* pricePressure: 売却による価格下落を加算する */
-function applySellPriceImpact(resource, amount){
-  const stabilityLevel = stats.upgrades.marketStability || 0;
-  const reduction = 1 - stabilityLevel*0.1; // Lv1で10%軽減
-  const impact = Math.min(0.3, (amount/1000) * 0.1) * reduction;
-  stats.market.priceAdjustment[resource] = (stats.market.priceAdjustment[resource] || 0) - impact;
-}
-
-/* 市場の自動回復（tickで呼ぶ） */
-function updateMarket(){
-  if(stats.tick % Math.round(TICKS_PER_MINUTE/30) === 0){ // approx every 2s
-    const maxFluct = 0.05;
-    const change = (Math.random()*maxFluct*2) - maxFluct;
-    stats.market.marketFluctuation = clamp(stats.market.marketFluctuation + change, 0.8, 1.2);
-  }
-  // priceAdjustment 回復
-  for(const k in stats.market.priceAdjustment){
-    if(stats.market.priceAdjustment[k] < 0){
-      stats.market.priceAdjustment[k] = Math.min(0, stats.market.priceAdjustment[k] + 0.001 * (1 + stats.upgrades.marketStability*0.2));
-    }
-  }
-}
-
-/* ======================
-   建物クラス（単純） and 生産
-   ====================== */
-class Building {
-  constructor(type){
-    this.type = type;
-    this.spec = BUILDING_SPECS[type];
-    this.timer = 0;
-    this.isStalled = false;
-  }
-  tick(){
-    this.timer++;
-    this.isStalled = false;
-    if(!this.spec.output){
-      // Utility building actions
-      if(this.type === 'AutoTransporter' && this.timer >= this.spec.time){
-        autoSellOneResource();
-        this.timer = 0;
-      } else if(this.type === 'TradePost' && this.timer >= this.spec.time){
-        autoTradeHighValueResource();
-        this.timer = 0;
-      } else if(this.type === 'ContractOffice' && this.timer >= this.spec.time){
-        autoContractSell();
-        this.timer = 0;
-      }
-      return false;
-    }
-    // Production speed effect
-    const prodSpeedLevel = stats.upgrades.productionSpeed || 0;
-    const prodEff = 1 - (prodSpeedLevel * 0.05);
-    const productionMultiplier = Math.max(0.2, prodEff - stats.upgrades.productionEfficiency*0.05);
-    const effectiveTime = Math.max(1, Math.floor(this.spec.time * productionMultiplier));
-
-    if(this.timer >= effectiveTime){
-      // stock limit
-      const stockLimit = computeStockLimit();
-      const outRes = this.spec.output.iron ? this.spec.output.iron : this.spec.output; // compatibility
-      const outKey = Object.values(this.spec.output)[0] || this.spec.output; // if {iron:'ore',amount:1} style earlier then adapt
-      // Our spec format: output:{iron:'ore',amount:1} earlier; in current we used {output:{iron:'iron',amount:1}}-- but to avoid confusion we will refer spec.output keys:
-      // We defined spec.output e.g. {iron:'ore',amount:1} (odd). Use mapping at top: Let's use object: output: { res:'iron', amount:1 }
-      // Adapt: if spec.output.res exists -> use that
-      const outputRes = this.spec.output.res || (this.spec.output && this.spec.output.resource) || Object.keys(this.spec.output)[0];
-      const outputAmt = this.spec.output.amount || (this.spec.output && this.spec.output.amount) || (this.spec.output[outputRes] || 1);
-
-      if(stats.resources[outputRes] + outputAmt > stockLimit){ this.isStalled = true; return false; }
-      if(this.spec.input){
-        let can = true;
-        for(const req of this.spec.input){
-          if(stats.resources[req.r] < req.a){ can = false; break; }
+        function getTotalBuildings() {
+            return Object.values(stats.buildings).flat().length;
         }
-        if(!can){ this.isStalled = true; return false; }
-        for(const req of this.spec.input){ stats.resources[req.r] -= req.a; }
-      }
-      stats.resources[outputRes] += outputAmt;
-      this.timer = 0;
-      return true;
-    }
-    return false;
-  }
-}
+        
+        // ★ NEW: ランキングデータをLocal Storageから読み込み/書き出し (要望: 10, 20)
+        function loadRanking() {
+            try {
+                const ranking = JSON.parse(localStorage.getItem('industryRanking')) || [];
+                return Array.isArray(ranking) ? ranking : [];
+            } catch (e) {
+                console.error("Failed to load ranking:", e);
+                return [];
+            }
+        }
+        
+        function saveRanking(newScore) {
+            let ranking = loadRanking();
+            
+            // 新しいスコアを追加
+            const rankEntry = {
+                score: newScore,
+                date: new Date().toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+            };
+            ranking.push(rankEntry);
+            
+            // スコアが高い順にソートし、トップ10のみ保持
+            ranking.sort((a, b) => b.score - a.score);
+            ranking = ranking.slice(0, 10);
+            
+            localStorage.setItem('industryRanking', JSON.stringify(ranking));
+        }
 
-/* ======================
-   自動化機能（AutoTransporter, TradePost, ContractOffice）
-   ====================== */
-const AUTO_SELL_ORDER = ['iron','copper_wire','steel_copper','alum','wafer','alloy'];
-function autoSellOneResource(){
-  // 自動搬送機は設定で売却数増加
-  const amt = 1 + (stats.upgrades.autoTransportEfficiency || 0);
-  for(const res of AUTO_SELL_ORDER){
-    if(stats.resources[res] >= amt){
-      const price = getResourcePrice(res);
-      const revenue = Math.floor(price * amt);
-      stats.gold += revenue;
-      stats.resources[res] -= amt;
-      applySellPriceImpact(res, amt);
-      pushLog(`自動搬送: ${RESOURCE_META[res].name} x${amt} を売却し ${revenue}G を獲得`);
-      return;
-    }
-  }
-}
-function autoTradeHighValueResource(){
-  const candidates = ['wafer','alloy'];
-  for(const c of candidates){
-    if(stats.resources[c] > 0){
-      const price = getResourcePrice(c);
-      const revenue = Math.floor(price * 0.9);
-      stats.gold += revenue;
-      stats.resources[c] -= 1;
-      applySellPriceImpact(c, 1);
-      pushLog(`自動取引所: ${RESOURCE_META[c].name} を売却 (90%) で ${revenue}G`);
-      return;
-    }
-  }
-}
-function autoContractSell(){
-  const sellables = ['iron','copper_wire','steel_copper','alum','wafer','alloy'];
-  const avail = sellables.filter(r=>stats.resources[r] > 0);
-  if(avail.length===0) return;
-  const pick = avail[Math.floor(Math.random()*avail.length)];
-  const base = RESOURCE_META[pick].basePrice;
-  const multiplier = 1.5 + (stats.upgrades.contractEfficiency||0)*0.1;
-  const revenue = Math.floor(base * multiplier);
-  stats.gold += revenue;
-  stats.resources[pick] -= 1;
-  pushLog(`契約オフィス: ${RESOURCE_META[pick].name} を契約売却で ${revenue}G (市場影響なし)`);
-}
+        // --- クラス定義 ---
+        class Building {
+            constructor(type) {
+                this.type = type;
+                this.spec = BUILDING_SPECS[type];
+                this.timer = 0;
+                this.isStalled = false; 
+            }
 
-/* ======================
-   生産ループ / tick
-   ====================== */
-function computeStockLimit(){
-  const base = BASE_STOCK_LIMIT;
-  const warehouseBonus = (stats.buildings.Warehouse ? stats.buildings.Warehouse.length : 0) * 5000;
-  const capacityLevel = stats.upgrades.warehouseCapacity || 0;
-  return Math.floor(base + warehouseBonus * (1 + capacityLevel*0.5));
-}
-function tickLoop(){
-  stats.tick++;
-  // market
-  updateMarket();
+            // ... (Building.updateのロジックはほぼ変更なし。自動売却部分に研究効果を反映) ...
+            update(productionMultiplier, stockLimit) {
+                this.timer++;
+                this.isStalled = false; 
+                
+                const effectiveTime = Math.max(1, Math.floor(this.spec.time * productionMultiplier));
+                const { resource: outputRes, amount: outputAmt } = this.spec.output || {};
 
-  // update investments
-  updateInvestment();
+                // ユーティリティ建物（生産しない）
+                if (!outputRes) {
+                    if (this.type === 'AutoTransporter' && this.timer >= effectiveTime) {
+                         autoSellOneResource(); 
+                         this.timer = 0;
+                         return false;
+                    }
+                    
+                    if (this.type === 'TradePost' && this.timer >= effectiveTime) {
+                        autoTradeHighValueResource();
+                        this.timer = 0;
+                        return false;
+                    }
 
-  // loan interest
-  updateLoanInterest();
+                    if (this.type === 'ContractOffice' && this.timer >= effectiveTime) {
+                         autoContractSell(); 
+                         this.timer = 0;
+                         return false;
+                    }
 
-  // buildings production
-  for(const type in stats.buildings){
-    for(const b of stats.buildings[type]){
-      b.tick && b.tick();
-    }
-  }
+                    if (this.type === 'Warehouse') return false; 
+                    return false;
+                }
 
-  // auto-sell toggle (if enabled)
-  if(stats.autoSellEnabled){
-    for(let i=0;i<stats.buildings.AutoTransporter.length;i++){
-      autoSellOneResource();
-    }
-  }
+                if (this.timer >= effectiveTime) {
+                    // ★ NEW: 上級素材生産効率アップ研究
+                    let finalOutputAmt = outputAmt;
+                    if (RESOURCE_CATEGORIES['上級加工品 (Advanced)'].includes(outputRes)) {
+                        const level = stats.upgrades.advancedMaterials;
+                        finalOutputAmt *= (1.0 + level * 0.1); // Lv1で10%増
+                    }
+                    
+                    // 在庫上限チェック (生産がストップする条件)
+                    if (stats.resources[outputRes] + finalOutputAmt > stockLimit) {
+                        this.isStalled = true; 
+                        return false; 
+                    }
 
-  // achievements check
-  checkAchievements();
+                    // 材料チェックと消費
+                    if (this.spec.input) {
+                        let canProduce = true;
+                        
+                        for (const requirement of this.spec.input) {
+                            if (stats.resources[requirement.resource] < requirement.amount) {
+                                canProduce = false;
+                                break;
+                            }
+                        }
 
-  // update UI
-  updateDisplay();
+                        if (!canProduce) {
+                            this.isStalled = true; 
+                            return false; 
+                        }
 
-  // periodic events (every 60 ticks ~ approx every 12s at TICK_RATE_MS=200)
-  if(stats.tick % (TICKS_PER_MINUTE/5) === 0) maybeSpawnEvent();
-}
+                        for (const requirement of this.spec.input) {
+                            stats.resources[requirement.resource] -= requirement.amount;
+                        }
+                    }
+                    
+                    // 生産
+                    stats.resources[outputRes] += finalOutputAmt;
+                    this.timer = 0; 
+                    return true; 
+                }
+                return false; 
+            }
+        }
 
-/* 投資更新 */
-function updateInvestment(){
-  if(stats.investment <= 0) return;
-  const stabilityLevel = stats.upgrades.investmentStability || 0;
-  const volatility = INVEST_BASE_VOLATILITY * (1 - stabilityLevel*0.15); // 減衰
-  const fluct = (Math.random()*2-1) * volatility;
-  const delta = Math.floor(stats.investment * fluct);
-  stats.investment = Math.max(0, stats.investment + delta);
-}
+        // --- ゲーム管理関数 ---
+        
+        // 自動搬送機による中間資源の自動売却
+        function autoSellOneResource() {
+            const sellEfficiencyLevel = stats.upgrades.autoSellEfficiency;
+            const efficiencyMultiplier = 1.0 + sellEfficiencyLevel * 0.05; // 5% per level
+            
+            for (let i = 0; i < stats.buildings.AutoTransporter.length; i++) {
+                const resKey = AUTO_SELL_RESOURCES[i % AUTO_SELL_RESOURCES.length];
+                
+                if (stats.resources[resKey] > 0) {
+                    const amountToSell = 1; 
+                    const price = getResourcePrice(resKey);
+                    const revenue = amountToSell * price * efficiencyMultiplier; // 効率研究適用
+                    
+                    stats.gold += revenue;
+                    stats.resources[resKey] -= amountToSell;
+                    
+                    const marketImpact = 0.00005; 
+                    stats.market.priceAdjustment[resKey] -= marketImpact; 
+                }
+            }
+        }
 
-/* ローン利子更新（緩和版） */
-function updateLoanInterest(){
-  if(stats.loan <= 0) return;
-  const reductionLevel = stats.upgrades.loanInterestReduction || 0;
-  let rate = LOAN_BASE_RATE * (1 - reductionLevel*0.12); // each level reduces 12% of base
-  // step function by amount
-  const step = Math.floor(stats.loan / 10000) * 0.0002;
-  rate = Math.min(rate + step, LOAN_MAX_RATE);
-  stats.loan += Math.floor(stats.loan * rate);
-}
+        // 自動取引所による高価値資源の取引
+        function autoTradeHighValueResource() {
+            const sellEfficiencyLevel = stats.upgrades.autoSellEfficiency;
+            const efficiencyMultiplier = 1.0 + sellEfficiencyLevel * 0.05; 
+            
+            for (let i = 0; i < stats.buildings.TradePost.length; i++) {
+                let targetResource = null;
+                const waferPrice = getResourcePrice('wafer');
+                const alloyPrice = getResourcePrice('alloy');
 
-/* =============== UI / 操作 =============== */
-let buildingCountMultiplier = 1;
+                if (stats.resources.wafer > 0 && stats.resources.alloy === 0) {
+                     targetResource = 'wafer';
+                } else if (stats.resources.alloy > 0 && stats.resources.wafer === 0) {
+                     targetResource = 'alloy';
+                } else if (stats.resources.wafer > 0 && stats.resources.alloy > 0) {
+                    targetResource = waferPrice >= alloyPrice ? 'wafer' : 'alloy';
+                }
 
-function setBuildingCountMultiplier(n){
-  buildingCountMultiplier = n;
-  document.querySelectorAll('[id^="mb-"]').forEach(b=>b.classList.remove('selected'));
-  // highlight chosen
-  updateDisplay();
-}
+                if (targetResource) {
+                    const price = getResourcePrice(targetResource);
+                    const revenue = Math.floor(price * 0.9 * efficiencyMultiplier); // 効率研究適用
+                    
+                    stats.gold += revenue;
+                    stats.resources[targetResource] -= 1;
+                    
+                    const marketImpact = 0.00001; 
+                    stats.market.priceAdjustment[targetResource] -= marketImpact;
+                }
+            }
+        }
 
-function getMaxPurchases(cost){
-  if(cost === 0) return 99999;
-  return Math.floor(stats.gold / cost);
-}
+        // 契約オフィスによる安定売却 (市場価格に影響なし)
+        function autoContractSell() {
+            const sellEfficiencyLevel = stats.upgrades.autoSellEfficiency;
+            const efficiencyMultiplier = 1.0 + sellEfficiencyLevel * 0.05; 
+            
+            const contractSellable = ['iron', 'copper_wire', 'steel_copper', 'alum', 'wafer', 'alloy'];
+            const availableResources = contractSellable.filter(r => stats.resources[r] > 0);
+            
+            if (availableResources.length > 0) {
+                const resKey = availableResources[Math.floor(Math.random() * availableResources.length)];
+                const basePrice = BASE_RESOURCE_PRICES[resKey];
+                const revenue = Math.floor(basePrice * 1.5 * efficiencyMultiplier); // 効率研究適用
 
-/* Build a building */
-function buildBuilding(type){
-  const spec = BUILDING_SPECS[type];
-  let count = buildingCountMultiplier;
-  if(count === 'max') count = getMaxPurchases(spec.cost);
-  if(count <= 0){ pushLog('購入数0'); return; }
-  const totalCost = spec.cost * count;
-  if(stats.gold < totalCost){ showMessage('資金不足', true); return; }
-  stats.gold -= totalCost;
-  for(let i=0;i<count;i++){
-    stats.buildings[type].push(new Building(type));
-  }
-  pushLog(`${spec.displayName} を ${count}基 建設しました (${totalCost}G)`);
-  updateDisplay();
-}
+                stats.gold += revenue;
+                stats.resources[resKey] -= 1;
+            }
+        }
 
-/* Sell resource */
-function sellResource(key){
-  const amt = stats.resources[key];
-  if(amt <= 0){ showMessage('売却可能な資源がありません', false); return; }
-  const price = getResourcePrice(key);
-  const revenue = Math.floor(price * SELL_PRICE_RATIO * amt);
-  stats.resources[key] = 0;
-  stats.gold += revenue;
-  applySellPriceImpact(key, amt);
-  pushLog(`${RESOURCE_META[key].name} x${amt} を売却し ${revenue}G を獲得`);
-  showMessage(`${RESOURCE_META[key].name} を売却しました`, true);
-  updateDisplay();
-}
 
-/* Sell all resources */
-function sellAllResources(){
-  let totalRevenue = 0;
-  let soldTypes = 0;
-  const stabilityLevel = stats.upgrades.marketStability || 0;
-  const reduction = 1 - (stabilityLevel * 0.1);
-  for(const r in stats.resources){
-    const amount = stats.resources[r];
-    if(amount > 0){
-      const p = getResourcePrice(r);
-      const rev = Math.floor(p * SELL_PRICE_RATIO * amount);
-      totalRevenue += rev;
-      stats.resources[r] = 0;
-      applySellPriceImpact(r, amount * reduction);
-      soldTypes++;
-    }
-  }
-  if(totalRevenue > 0){
-    stats.gold += totalRevenue;
-    pushLog(`全資源を売却し ${totalRevenue}G を得た (種類: ${soldTypes})`);
-    showMessage(`全資源を売却しました: ${formatNum(totalRevenue)}G`, true);
-  } else {
-    showMessage('売却可能な資源はありません', false);
-  }
-  updateDisplay();
-}
+        // 投資機能の更新
+        function updateInvestment() {
+            if (stats.investment <= 0) return;
 
-/* Auto-sell toggle */
-function autoSellAll(){
-  stats.autoSellEnabled = !stats.autoSellEnabled;
-  pushLog(`自動売却: ${stats.autoSellEnabled ? 'ON' : 'OFF'}`);
-  updateDisplay();
-}
+            const fluctuationRate = (Math.random() * 0.01) - 0.005; // -0.5% から 0.5% (要望: 4, 14)
+            const changeAmount = Math.floor(stats.investment * fluctuationRate);
+            
+            stats.investment += changeAmount;
+            stats.investment = Math.max(0, stats.investment); 
+        }
 
-/* Invest / withdraw */
-function investMoney(val){
-  const amount = parseInt(val);
-  if(isNaN(amount) || amount <= 0){ showMessage('有効な投資額を入力', false); return; }
-  if(stats.gold < amount){ showMessage('資金不足', false); return; }
-  stats.gold -= amount;
-  stats.investment += amount;
-  pushLog(`${formatNum(amount)}G を投資しました`);
-  updateDisplay();
-}
-function withdrawInvestment(){
-  if(stats.investment <= 0){ showMessage('投資なし', false); return; }
-  stats.gold += stats.investment;
-  pushLog(`投資 ${formatNum(stats.investment)}G を回収しました`);
-  stats.investment = 0;
-  updateDisplay();
-}
+        // ローン利子の計算
+        function updateLoanInterest() {
+             if (stats.loan <= 0) return;
 
-/* Loan */
-function takeLoan(amount){
-  const amt = parseInt(amount);
-  if(isNaN(amt) || amt<=0) return;
-  if(stats.loan + amt > 2000000){ showMessage('借入上限を超えます', false); return; }
-  stats.loan += amt;
-  stats.gold += amt;
-  pushLog(`銀行から ${formatNum(amt)}G を借入`);
-  updateDisplay();
-}
-function repayLoan(){
-  if(stats.loan <= 0){ showMessage('借入なし', false); return; }
-  if(stats.gold >= stats.loan){
-    stats.gold -= stats.loan;
-    pushLog(`ローン ${formatNum(stats.loan)}G を全額返済`);
-    stats.loan = 0;
-    updateDisplay();
-  } else {
-    showMessage('返済資金が不足しています', false);
-  }
-}
+             const mitigationLevel = stats.upgrades.loanInterestMitigation;
+             const interestMultiplier = 1.0 - mitigationLevel * 0.15; // 15% per level
+             
+             let interest = Math.floor(stats.loan * LOAN_INTEREST_RATE * interestMultiplier);
+             
+             // 借入が100,000Gを超えた場合、利子が加速する（ペナルティ）
+             if (stats.loan > 100000) {
+                 const penaltyInterest = Math.floor(stats.loan * 0.00001); // 追加で0.001%
+                 interest += penaltyInterest;
+             }
+             
+             stats.loan += interest;
+        }
 
-/* Research */
-const RESEARCH_NODES = [
-  {id:'r_prod', title:'効率化 I', cost:200, desc:'全設備の生産効率 +10%', prereq:null, effect: (g)=>{ g.upgrades.productionEfficiency += 1; }},
-  {id:'r_prod2', title:'効率化 II', cost:800, desc:'全設備の生産効率 +20%', prereq:'r_prod', effect:(g)=>{ g.upgrades.productionEfficiency += 2; }},
-  {id:'r_market', title:'市場安定化', cost:300, desc:'売却ペナルティを軽減', prereq:null, effect:(g)=>{ g.upgrades.marketStability += 1; }},
-  {id:'r_auto', title:'自動化基礎', cost:500, desc:'自動搬送の効率を上げる', prereq:null, effect:(g)=>{ g.upgrades.autoTransportEfficiency += 1; }},
-  {id:'r_loan', title:'ローン管理', cost:1000, desc:'ローン利子を軽減', prereq:null, effect:(g)=>{ g.upgrades.loanInterestReduction += 1; }},
-  {id:'r_invest', title:'投資安定化', cost:700, desc:'投資変動を小さくする', prereq:null, effect:(g)=>{ g.upgrades.investmentStability += 1; }},
-  {id:'r_speed', title:'生産速度', cost:1200, desc:'生産速度を早める', prereq:'r_prod', effect:(g)=>{ g.upgrades.productionSpeed += 1; }}
-];
+        // 実績チェック
+        function checkAchievements() {
+            for (const key in ACHIEVEMENT_DEFINITIONS) {
+                if (!stats.achievements[key]) {
+                    if (ACHIEVEMENT_DEFINITIONS[key].check()) {
+                        stats.achievements[key] = true;
+                        showMessage(`🏆 実績達成！: ${ACHIEVEMENT_DEFINITIONS[key].name}`, 'lime', 'msg-achieve');
+                    }
+                }
+            }
+        }
 
-function renderResearch(){
-  const cont = document.getElementById('ig-research-tree');
-  cont.innerHTML = '';
-  RESEARCH_NODES.forEach(node=>{
-    const unlocked = !!stats.research?.[node.id];
-    const locked = node.prereq && !stats.research?.[node.prereq];
-    const card = document.createElement('div');
-    card.className = 'research-card' + (locked ? ' locked' : '');
-    card.innerHTML = `<div style="font-weight:800">${node.title}</div>
-      <div style="font-size:13px;color:var(--muted)">${node.desc}</div>
-      <div style="margin-top:6px">${unlocked ? '取得済' : `コスト: ${node.cost}G`}</div>
-      <div style="margin-top:6px"><button class="button small" ${locked||unlocked? 'disabled':''} onclick="buyResearch('${node.id}')">${unlocked? '取得済':'研究'}</button></div>`;
-    cont.appendChild(card);
-  });
-}
-function buyResearch(id){
-  const node = RESEARCH_NODES.find(n=>n.id===id);
-  if(!node) return;
-  if(stats.gold < node.cost){ showMessage('資金不足で研究できません', false); return; }
-  if(node.prereq && !stats.research?.[node.prereq]){ showMessage('前提が未達成です', false); return; }
-  stats.gold -= node.cost;
-  stats.research = stats.research || {};
-  stats.research[id] = true;
-  node.effect(stats);
-  pushLog(`研究 ${node.title} を習得`);
-  renderResearch();
-  updateDisplay();
-}
+        function updateGame() {
+            stats.tick++;
+            
+            updateMarket(); 
+            updateInvestment(); 
+            updateLoanInterest(); 
+            checkAchievements();
+            
+            // ★ NEW: フラッシュアニメーションのための前状態保存 (要望: 8, 18)
+            lastGold = stats.gold;
+            lastResources = {...stats.resources};
 
-/* Achievements */
-function checkAchievements(){
-  for(const key in ACHIEVEMENT_DEFINITIONS){
-    if(!stats.achievements[key] && ACHIEVEMENT_DEFINITIONS[key].check()){
-      stats.achievements[key] = true;
-      pushLog(`🏆 実績達成: ${ACHIEVEMENT_DEFINITIONS[key].name}`);
-      showMessage(`実績達成: ${ACHIEVEMENT_DEFINITIONS[key].name}`, true);
-    }
-  }
-  renderAchievements();
-}
-function renderAchievements(){
-  const panel = document.getElementById('achievement-panel-container');
-  panel.innerHTML = '';
-  let total = 0, achieved = 0;
-  for(const key in ACHIEVEMENT_DEFINITIONS){
-    total++;
-    const def = ACHIEVEMENT_DEFINITIONS[key];
-    const unlocked = !!stats.achievements[key];
-    if(unlocked) achieved++;
-    const el = document.createElement('div');
-    el.className = 'ach-card';
-    el.style.opacity = unlocked ? 1 : 0.5;
-    el.innerHTML = `<div style="font-weight:800">${def.name}</div><div style="font-size:13px;color:var(--muted)">${def.desc}</div>`;
-    panel.appendChild(el);
-  }
-  document.getElementById('total-achievements').textContent = total;
-  document.getElementById('achieved-count').textContent = achieved;
-}
+            const prodLevel = stats.upgrades.productionEfficiency;
+            const productionMultiplier = 1.0 - (prodLevel * 0.05); 
+            
+            const capacityLevel = stats.upgrades.warehouseCapacity;
+            const capacityMultiplier = 1.0 + (capacityLevel * 0.5); 
+            const warehouseBonus = stats.buildings.Warehouse.length * 5000; 
+            const stockLimit = BASE_STOCK_LIMIT + (warehouseBonus * capacityMultiplier);
 
-/* Quest system: example simple quests */
-const QUESTS = [
-  {id:'q1', title:'採掘開始', desc:'採掘所を1基建てる', check:()=>getTotalBuildings()>=1, reward: ()=>{ stats.gold += 200; pushLog('クエスト報酬: 200G'); }},
-  {id:'q2', title:'鉄を集める', desc:'鉄を50個生産する', check:()=>stats.resources.iron >= 50, reward: ()=>{ stats.prestige_currency += 5; pushLog('クエスト報酬: プレステージ+5'); }}
-];
-function checkQuests(){
-  QUESTS.forEach(q=>{
-    if(!stats.quests) stats.quests = {};
-    if(!stats.quests[q.id] && q.check()){
-      stats.quests[q.id] = true;
-      q.reward();
-      pushLog(`クエスト達成: ${q.title}`);
-    }
-  });
-}
 
-/* Random events */
-function maybeSpawnEvent(){
-  if(Math.random() < 0.06){ // ~6% chance
-    const events = [
-      ()=>{ // 資源ボーナス
-        const rKeys = Object.keys(RESOURCE_META);
-        const pick = rKeys[Math.floor(Math.random()*rKeys.length)];
-        const amt = Math.floor(Math.random()*10)+5;
-        stats.resources[pick] += amt;
-        pushLog(`イベント: ${RESOURCE_META[pick].name} をボーナスで ${amt} 受領`);
-      },
-      ()=>{ // 市場暴落
-        for(const k in stats.market.priceAdjustment) stats.market.priceAdjustment[k] -= 0.02;
-        pushLog('イベント: 市場が一時的に不安定に');
-      },
-      ()=>{ // 投資配当
-        const gain = Math.floor((Math.random()*0.2+0.1) * Math.max(100, stats.investment));
-        stats.gold += gain;
-        pushLog(`イベント: 投資配当 ${gain}G を受取`);
-      }
-    ];
-    const ev = events[Math.floor(Math.random()*events.length)];
-    ev();
-  }
-}
+            for (const type in stats.buildings) {
+                stats.buildings[type].forEach(building => {
+                    building.update(productionMultiplier, stockLimit);
+                });
+            }
 
-/* Trade log */
-let TRADE_LOG = [];
-function pushLog(text){
-  TRADE_LOG.unshift(`${new Date().toLocaleTimeString()} - ${text}`);
-  if(TRADE_LOG.length > 200) TRADE_LOG.pop();
-  renderTradeLog();
-}
-function renderTradeLog(){
-  const el = document.getElementById('trade-log');
-  el.innerHTML = TRADE_LOG.map(t=>`<div style="padding:6px;border-bottom:1px dashed rgba(255,255,255,0.02);font-size:13px;color:var(--muted)">${t}</div>`).join('');
-}
+            updateDisplay(stockLimit);
+            
+            // ★ NEW: フラッシュアニメーション実行 (要望: 8, 18)
+            applyFlashAnimations();
+        }
+        
+        // 市場変動の更新
+        function updateMarket() {
+            // A. ランダムな市場変動 (2秒ごと)
+            if (stats.tick % 20 === 0) { 
+                const maxFluctuation = 0.05; 
+                const randomChange = (Math.random() * maxFluctuation * 2) - maxFluctuation;
+                stats.market.marketFluctuation = Math.min(1.2, Math.max(0.8, stats.market.marketFluctuation + randomChange));
+            }
 
-/* Display: resources, buildings, production rates, research etc. */
-let resourceFilter = 'all';
-function filterResource(cat){ resourceFilter = cat; updateDisplay(); }
+            // B. 売却による価格下落の回復
+            for (const key in stats.market.priceAdjustment) {
+                if (stats.market.priceAdjustment[key] < 0) {
+                    stats.market.priceAdjustment[key] = Math.min(0, stats.market.priceAdjustment[key] + 0.001); 
+                }
+            }
+        }
 
-/* compute production per minute from active buildings */
-function calcProductionPerMinute(){
-  const totals = {};
-  for(const type in stats.buildings){
-    const spec = BUILDING_SPECS[type];
-    if(!spec || !spec.output) continue;
-    const count = stats.buildings[type].length;
-    if(count === 0) continue;
-    // production speed and efficiency
-    const prodSpeedLevel = stats.upgrades.productionSpeed || 0;
-    const prodEff = 1 - (prodSpeedLevel * 0.05) - (stats.upgrades.productionEfficiency||0)*0.05;
-    const effectiveTime = Math.max(1, Math.floor(spec.time * Math.max(0.2, prodEff)));
-    const cyclesPerMin = TICKS_PER_MINUTE / effectiveTime;
-    const perMin = cyclesPerMin * spec.output.amount * count;
-    const outKey = spec.output.res;
-    totals[outKey] = (totals[outKey] || 0) + perMin;
-  }
-  return totals;
-}
+        // 資源の現在価格を取得
+        function getResourcePrice(resourceKey) {
+            const basePrice = BASE_RESOURCE_PRICES[resourceKey];
+            const randomMultiplier = stats.market.marketFluctuation;
+            const saleAdjustment = 1.0 + stats.market.priceAdjustment[resourceKey];
+            
+            return Math.max(1, Math.floor(basePrice * randomMultiplier * saleAdjustment));
+        }
 
-function updateDisplay(){
-  // Status
-  document.getElementById('gold-display').textContent = formatNum(stats.gold);
-  document.getElementById('investment-display').textContent = formatNum(stats.investment);
-  document.getElementById('loan-display').textContent = formatNum(stats.loan);
-  document.getElementById('tick-display').textContent = stats.tick;
-  document.getElementById('prestige-currency-display').textContent = stats.prestige_currency;
-  const stockLimit = computeStockLimit();
-  document.getElementById('stock-limit-display').textContent = formatNum(stockLimit);
+        // --- アクション関数 ---
 
-  // Build buttons
-  const buildButtons = document.getElementById('build-buttons');
-  buildButtons.innerHTML = '';
-  for(const type in BUILDING_SPECS){
-    const spec = BUILDING_SPECS[type];
-    const cost = spec.cost;
-    let buyCount = buildingCountMultiplier;
-    if(buyCount === 'max') buyCount = getMaxPurchases(cost);
-    const totalCost = cost * buyCount;
-    const canBuy = stats.gold >= cost;
-    const btn = document.createElement('div');
-    btn.className = 'build-card';
-    btn.innerHTML = `<div class="build-title">${spec.displayName}</div>
-      <div class="build-meta">コスト: ${cost}G ${spec.output ? '| 出力: ' + (spec.output.res) : ''}</div>
-      <div style="margin-top:auto;display:flex;gap:8px;justify-content:space-between">
-        <div class="small">所持: ${stats.buildings[type].length}</div>
-        <div>
-          <button class="button small" ${!canBuy?'disabled':''} onclick="buildBuilding('${type}')">建設 ${buyCount==='max'? '(MAX)':`(${buyCount})`}</button>
-        </div>
-      </div>`;
-    buildButtons.appendChild(btn);
-  }
+        // 建物の売却 (要望: 9, 19)
+        function sellBuilding(type) {
+            const buildingsOfType = stats.buildings[type];
+            if (buildingsOfType && buildingsOfType.length > 0) {
+                
+                let count = stats.buildingCountMultiplier;
+                if (count === 'max') {
+                    count = buildingsOfType.length;
+                }
+                count = Math.min(count, buildingsOfType.length);
+                
+                if (count === 0) return;
 
-  // Buildings status
-  const bs = document.getElementById('buildings-status');
-  bs.innerHTML = '';
-  for(const type in stats.buildings){
-    const spec = BUILDING_SPECS[type];
-    const count = stats.buildings[type].length;
-    if(count === 0) continue;
-    const stalled = stats.buildings[type].filter(b=>b.isStalled).length;
-    const el = document.createElement('div');
-    el.style.display='flex';el.style.justifyContent='space-between';el.style.alignItems='center';
-    el.innerHTML = `<div><strong>${spec.displayName}</strong> ${count}基 ${stalled>0?`(停止:${stalled})`:''}</div>
-      <div class="small">${spec.output? `出力: ${spec.output.res}`:''}</div>`;
-    if(stalled===0) el.classList.add('anim-run');
-    bs.appendChild(el);
-  }
+                const cost = BUILDING_SPECS[type].cost;
+                const totalRefund = Math.floor(cost * count * SELL_BUILDING_RATE);
+                
+                stats.gold += totalRefund;
+                buildingsOfType.splice(0, count); // 先頭から指定数削除
 
-  // Production rates per minute
-  const rates = calcProductionPerMinute();
-  const prDiv = document.getElementById('production-rates');
-  prDiv.innerHTML = '';
-  for(const k in rates){
-    const name = RESOURCE_META[k].name;
-    prDiv.innerHTML += `<div class="small">${name}: ${rates[k].toFixed(1)} /分</div>`;
-  }
-  if(Object.keys(rates).length===0) prDiv.innerHTML = '<div class="small" style="color:var(--muted)">稼働中の生産設備はありません。</div>';
+                showMessage(`${BUILDING_SPECS[type].displayName}を${count}基売却し、${totalRefund.toFixed(0)}Gを回収しました。 (80%返金)`, 'orange');
+            } else {
+                showMessage('売却できる建物がありません。', 'yellow');
+            }
+            updateDisplay();
+        }
 
-  // Resource list
-  const resourceList = document.getElementById('resource-list');
-  resourceList.innerHTML = '';
-  let totalStock = 0;
-  for(const key in stats.resources){
-    totalStock += stats.resources[key];
-    const meta = RESOURCE_META[key];
-    if(resourceFilter !== 'all' && meta.category !== resourceFilter) continue;
-    const price = getResourcePrice(key);
-    const priceChangePercent = ((price / meta.basePrice) - 1) * 100;
-    let changeClass = priceChangePercent > 0.1 ? 'price-up' : (priceChangePercent < -0.1 ? 'price-down' : '');
-    const item = document.createElement('div');
-    item.className = 'resource-item';
-    item.innerHTML = `<div>
-        <div class="resource-name">${meta.name} <span class="small">(${key})</span></div>
-        <div class="resource-meta">${stats.resources[key]} ${meta.unit} / 価格: ${price}G</div>
-      </div>
-      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
-        <div class="small ${changeClass}">${priceChangePercent.toFixed(1)}%</div>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:6px">
-        <button class="button small" ${stats.resources[key]===0?'disabled':''} onclick="sellResource('${key}')">売却 (${Math.floor(price*SELL_PRICE_RATIO)}G)</button>
-        <button class="button small ghost" onclick="showResourceInfo('${key}')">説明</button>
-      </div>`;
-    resourceList.appendChild(item);
-  }
-  document.getElementById('total-stock-info').textContent = `総在庫: ${totalStock} / 上限: ${formatNum(computeStockLimit())}`;
+        // 購入数乗数の設定
+        function setBuildingCountMultiplier(count) {
+            stats.buildingCountMultiplier = count;
+            document.querySelectorAll('.multi-buy-button').forEach(btn => {
+                btn.classList.remove('selected');
+                if (btn.getAttribute('data-count') == count) {
+                    btn.classList.add('selected');
+                }
+            });
+            updateDisplay(); 
+        }
 
-  // Investment panel
-  document.getElementById('investment-status').textContent = `${formatNum(stats.investment)}G`;
+        // 最大購入可能数の計算
+        function getMaxPurchases(cost) {
+            if (cost === 0) return 99999;
+            return Math.floor(stats.gold / cost);
+        }
+        
+        // タブ切り替え関数
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.style.display = 'none';
+            });
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
 
-  // Research UI
-  document.getElementById('research-points').textContent = (stats.researchPoints || 0);
-  renderResearch();
+            document.getElementById(`tab-${tabId}`).style.display = 'block';
+            document.querySelector(`.tab-button[onclick*="'${tabId}'"]`).classList.add('active');
+            
+            // 情報タブを開いたときに情報リストを生成
+            if (tabId === 'info') {
+                 generateInfoList();
+            }
+            
+            // 実績タブを開いたときに実績とランキングを生成
+            if (tabId === 'achievement') {
+                 generateAchievementList();
+                 generateRankingList();
+            }
+        }
+        
+        // --- UI描画関数 ---
 
-  // Achievements
-  renderAchievements();
+        // ★ NEW: フラッシュアニメーションの適用 (要望: 8, 18)
+        function applyFlashAnimations() {
+            // ゴールドのフラッシュ
+            const goldDisplay = document.getElementById('gold-display');
+            if (stats.gold > lastGold) {
+                goldDisplay.classList.add('flash-positive');
+            } else if (stats.gold < lastGold) {
+                goldDisplay.classList.add('flash-negative');
+            }
+            setTimeout(() => {
+                goldDisplay.classList.remove('flash-positive', 'flash-negative');
+            }, 100); 
 
-  // Trade log
-  renderTradeLog();
+            // 資源のフラッシュ (リソースタブが開いていれば)
+            if (document.getElementById('tab-resource').style.display !== 'none') {
+                for (const key in stats.resources) {
+                    if (stats.resources[key] > lastResources[key]) {
+                        const element = document.getElementById(`${key}-display`);
+                        if (element) {
+                            element.classList.add('flash-positive');
+                            setTimeout(() => { element.classList.remove('flash-positive'); }, 100);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // UI描画の更新
+        function updateDisplay(stockLimit) {
+            // 1. ステータス (常に表示)
+            document.getElementById('gold-display').textContent = stats.gold.toFixed(0); 
+            document.getElementById('investment-display').textContent = stats.investment.toFixed(0); 
+            document.getElementById('tick-display').textContent = stats.tick;
+            document.getElementById('stock-limit-display').textContent = stockLimit.toFixed(0);
+            document.getElementById('stock-limit-info').textContent = `現在の在庫上限: ${stockLimit.toFixed(0)}`;
+            document.getElementById('prestige-currency-display').textContent = stats.prestige_currency.toFixed(0);
 
-  // Prestige calculation
-  const totalAssets = stats.gold + stats.investment - stats.loan;
-  const prestigeGain = Math.max(0, Math.floor(Math.log10(Math.max(1,totalAssets)/100000) * 10) * 10);
-  document.getElementById('prestige-gain-display').textContent = prestigeGain;
-  document.getElementById('prestige-button').disabled = totalAssets < 100000;
-}
+            // 1A. ローンパネルの更新
+            const loanStatusDiv = document.getElementById('loan-panel-status');
+            const repayButton = document.getElementById('repay-loan-button');
+            const interestRateDisplay = (LOAN_INTEREST_RATE * TICKS_PER_MINUTE * (1.0 - stats.upgrades.loanInterestMitigation * 0.15) * 100).toFixed(4);
+            
+            if (stats.loan > 0) {
+                 loanStatusDiv.innerHTML = `借入額: <span style="color: #FF7043;">${stats.loan.toFixed(0)}G</span> (利子約${interestRateDisplay}\%/分)`;
+                 repayButton.disabled = stats.gold < stats.loan;
+                 repayButton.textContent = `全額返済 (${stats.loan.toFixed(0)}G)`;
+            } else {
+                 loanStatusDiv.textContent = '借入額: 0G (借り入れ可能)';
+                 repayButton.disabled = true;
+                 repayButton.textContent = `全額返済 (0G)`;
+            }
 
-/* Resource info modal */
-function showResourceInfo(key){
-  const meta = RESOURCE_META[key];
-  alert(`${meta.name}\nカテゴリ: ${meta.category}\n基底価格: ${meta.basePrice}G\n単位: ${meta.unit}\n\n用途:\n` + listUsage(key));
-}
-function listUsage(key){
-  // list building inputs that require this resource and building that outputs it
-  let lines = [];
-  for(const [bkey,spec] of Object.entries(BUILDING_SPECS)){
-    if(spec.input){
-      for(const req of spec.input){
-        if(req.r === key) lines.push(`${spec.displayName} の原料 (${req.a} ${RESOURCE_META[key].unit})`);
-      }
-    }
-    if(spec.output && spec.output.res === key) lines.push(`${spec.displayName} の生産物 (${spec.output.amount} ${RESOURCE_META[key].unit})`);
-  }
-  return lines.join('\n') || '特になし';
-}
+            // 1B. クイック売却ボタンの更新
+            document.getElementById('qs-wafer').disabled = stats.resources.wafer === 0;
+            document.getElementById('qs-alloy').disabled = stats.resources.alloy === 0;
+            let totalStock = Object.values(stats.resources).reduce((sum, current) => sum + current, 0);
+            document.getElementById('sell-all-button').disabled = totalStock === 0;
+            
+            // 投資パネルの更新
+            const investAmount = document.getElementById('invest-amount').value;
+            document.querySelector('#investment-panel .invest-button:nth-child(2)').disabled = stats.gold < investAmount;
+            document.querySelector('#investment-panel .invest-button:nth-child(3)').disabled = stats.investment <= 0;
+            document.getElementById('investment-status').textContent = `現在、${stats.investment.toFixed(0)}Gを投資中。`;
 
-/* Prestige reset */
-function prestigeReset(){
-  const totalAssets = stats.gold + stats.investment - stats.loan;
-  const prestigeGain = Math.max(0, Math.floor(Math.log10(Math.max(1,totalAssets)/100000) * 10) * 10);
-  if(prestigeGain <= 0){ showMessage('プレステージ条件を満たしていません。', false); return; }
-  if(!confirm(`プレステージを実行しますか？${prestigeGain}⭐を獲得します（進行はリセットされます）`)) return;
-  stats.prestige_currency += prestigeGain;
-  // simple reset preserving prestige
-  const keep = {prestige_currency: stats.prestige_currency};
-  stats = Object.assign({
-    gold: 1000 + prestigeGain*10,
-    investment:0, loan:0, prestige_currency: keep.prestige_currency, tick:0, buildingCountMultiplier:1, resources:{}, buildings:{}, upgrades:{ productionEfficiency:0, warehouseCapacity:0, marketStability:0, productionSpeed:0, autoTransportEfficiency:0, contractEfficiency:0, investmentStability:0, loanInterestReduction:0, advancedAutomation:0}, achievements:{}, market:{priceAdjustment:{},marketFluctuation:1.0}, autoSellEnabled:false
-  }, {});
-  for(const r in RESOURCE_META) stats.resources[r]=0;
-  for(const b in BUILDING_SPECS) stats.buildings[b]=[];
-  pushLog(`プレステージ実行: ${prestigeGain}⭐ 獲得`);
-  updateDisplay();
-}
 
-/* Notifications */
-function showMessage(msg, positive){
-  const area = document.getElementById('message-area');
-  area.textContent = msg;
-  area.className = positive ? 'msg-good' : '';
-  if(!positive) area.classList.add('msg-bad');
-  setTimeout(()=>{ area.className=''; area.textContent=''; }, 4000);
-}
-function getMaxPurchases(cost){ if(cost===0) return 99999; return Math.floor(stats.gold/cost); }
+            // 2. 資源リストの動的生成 (資源タブ)
+            const resourceList = document.getElementById('resource-list');
+            if (resourceList.parentElement.style.display !== 'none') {
+                resourceList.innerHTML = '';
+                
+                // ★ NEW: カテゴリごとに表示 (要望: 5, 15)
+                for (const category in RESOURCE_CATEGORIES) {
+                    const categoryDiv = document.createElement('div');
+                    categoryDiv.className = 'resource-category';
+                    categoryDiv.innerHTML = `<h3>${category}</h3>`;
+                    
+                    RESOURCE_CATEGORIES[category].forEach(key => {
+                        const amount = stats.resources[key];
+                        const price = getResourcePrice(key); 
+                        const displayName = RESOURCE_NAMES[key];
+                        const unit = RESOURCE_UNITS[key];
+                        
+                        const basePrice = BASE_RESOURCE_PRICES[key];
+                        const priceChangePercent = ((price / basePrice) - 1) * 100;
+                        let changeClass = 'price-down';
+                        let changeIcon = '▼';
+                        if (priceChangePercent > 0.1) {
+                            changeClass = 'price-up';
+                            changeIcon = '▲';
+                        } else if (priceChangePercent > -0.1) {
+                            changeIcon = '－';
+                            changeClass = '';
+                        }
 
-/* ====== UI initialization ====== */
-function initUI(){
-  // build grid placeholder
-  updateDisplay();
-  renderResearch();
-  renderAchievements();
-  pushLog('ゲーム開始');
-}
+                        const itemDiv = document.createElement('div');
+                        itemDiv.className = 'resource-item';
+                        
+                        itemDiv.innerHTML += `
+                            <span class="resource-name">${displayName}</span>
+                            <span class="resource-value" id="${key}-display">${amount.toFixed(0)} ${unit}</span>
+                            <div class="sell-actions">
+                                <span class="price-info">
+                                    ${price}G/${unit} 
+                                    <span class="${changeClass} price-change">
+                                        ${changeIcon}${Math.abs(priceChangePercent).toFixed(1)}%
+                                    </span>
+                                </span>
+                                <button class="sell-button" onclick="sellResource('${key}')" ${amount === 0 ? 'disabled' : ''}>
+                                    売却
+                                </button>
+                            </div>
+                        `;
+                        categoryDiv.appendChild(itemDiv);
+                    });
+                    resourceList.appendChild(categoryDiv);
+                }
+            }
 
-/* ===== Logging render ===== */
-function renderTradeLog(){
-  const el = document.getElementById('trade-log');
-  el.innerHTML = TRADE_LOG.map(t=>`<div style="padding:6px;border-bottom:1px dashed rgba(255,255,255,0.02);font-size:13px;color:var(--muted)">${t}</div>`).join('');
-}
+            // 3. 研究パネルの更新 (研究タブ)
+            const researchList = document.getElementById('research-list');
+            if (researchList.parentElement.style.display !== 'none') {
+                researchList.innerHTML = '';
+                for (const key in GLOBAL_UPGRADES) {
+                    const spec = GLOBAL_UPGRADES[key];
+                    const currentLevel = stats.upgrades[key];
+                    const nextLevel = currentLevel + 1;
+                    const cost = spec.getCost(currentLevel);
+                    const isMax = currentLevel >= spec.maxLevel;
+                    
+                    const researchDiv = document.createElement('div');
+                    researchDiv.className = 'research-item';
+                    researchDiv.style.borderLeft = `5px solid #2196F3`;
+                    researchDiv.style.backgroundColor = `#282828`;
+                    researchDiv.style.padding = '10px';
+                    researchDiv.style.marginBottom = '10px';
+                    researchDiv.style.borderRadius = '5px';
+                    
+                    // ★ NEW: 研究コスト削減研究の反映
+                    const researchCostReduction = stats.upgrades.researchSpeed * 0.05; // 5% per level
+                    const finalCost = Math.ceil(cost * (1.0 - researchCostReduction));
 
-/* ================ Achievements & quests run ================ */
-function pushLog(msg){
-  TRADE_LOG = TRADE_LOG || [];
-  TRADE_LOG.unshift(`${new Date().toLocaleTimeString()} - ${msg}`);
-  if(TRADE_LOG.length>200) TRADE_LOG.pop();
-  renderTradeLog();
-}
+                    researchDiv.innerHTML = `
+                        <span style="font-weight: bold; color: #FFEB3B; font-size: 1.1em;">${spec.displayName} (Lv.${currentLevel})</span>
+                        <p style="margin: 5px 0; font-size: 0.9em; color: #aaa;">
+                            ${isMax ? '最大レベル達成。' : `次レベル効果: ${spec.effect(nextLevel)}`}
+                        </p>
+                        <button class="research-button" 
+                                onclick="researchUpgrade('${key}')" 
+                                ${stats.gold < finalCost || isMax ? 'disabled' : ''}>
+                            ${isMax ? '最大' : `研究 (${finalCost}G)`}
+                        </button>
+                    `;
+                    researchList.appendChild(researchDiv);
+                }
+            }
 
-/* ================ Tab switching ================ */
-function switchTab(id){
-  document.querySelectorAll('.tab-content').forEach(x=>x.style.display='none');
-  document.getElementById('tab-'+id).style.display='block';
-  document.querySelectorAll('.tab-button').forEach(b=>b.classList.remove('active'));
-  // highlight clicked one
-  document.querySelectorAll('.tab-button').forEach(b=>{
-    if(b.textContent.includes('建設') && id==='build') b.classList.add('active');
-    if(b.textContent.includes('資源') && id==='resource') b.classList.add('active');
-    if(b.textContent.includes('研究') && id==='research') b.classList.add('active');
-    if(b.textContent.includes('実績') && id==='achievement') b.classList.add('active');
-  });
-}
 
-/* ================ Initial population of UI elements ================ */
-function populateInitialElements(){
-  // add build buttons container element exists already; updateDisplay will fill
-  // wire up loan buttons in status panel
-  const loanPanel = document.getElementById('loan-panel');
-  loanPanel.innerHTML += ` <button class="button small" onclick="takeLoan(10000)">10,000G借入</button>
-    <button class="button small" onclick="repayLoan()">全額返済</button>`;
-  // invest panel buttons already in DOM - their handlers call functions we defined
-}
+            // 4. 建設状況と生産能力の計算・表示 (建設タブ)
+            const buildButtonsDiv = document.getElementById('build-buttons');
+            const prodRateDetailsDiv = document.getElementById('prod-rate-details');
 
-/* ======================
-   Start loop
-   ====================== */
-initUI();
-populateInitialElements();
-updateDisplay();
-setInterval(tickLoop, TICK_RATE_MS);
+            if (buildButtonsDiv.parentElement.style.display !== 'none') {
+                buildButtonsDiv.innerHTML = '';
+                prodRateDetailsDiv.innerHTML = '';
 
-</script>
+                let totalProductionRates = {};
+                let buildingTypes = Object.keys(BUILDING_SPECS);
+                let statusHtml = '';
+
+                const prodLevel = stats.upgrades.productionEfficiency;
+                const productionMultiplier = 1.0 - (prodLevel * 0.05); 
+                
+                // 建物カードの生成
+                for (const type of buildingTypes) {
+                    const spec = BUILDING_SPECS[type];
+                    const count = stats.buildings[type].length;
+                    const cost = spec.cost;
+                    const isMineUpgrade = type === 'AdvMine';
+                    const canBuy = cost > 0;
+
+                    // 建物ステータス表示 (稼働状況と詳細レート)
+                    if (count > 0 || canBuy) {
+                        let stalledCount = 0;
+                        if (spec.output) { 
+                             stats.buildings[type].forEach(b => {
+                                 if (b.isStalled) stalledCount++;
+                             });
+                        }
+                        
+                        // 生産レート計算 (要望: 6, 16)
+                        if (spec.output) {
+                            const effectiveTime = Math.max(1, Math.floor(spec.time * productionMultiplier));
+                            const cyclesPerMin = TICKS_PER_MINUTE / effectiveTime;
+                            const outputPerMinTotal = cyclesPerMin * spec.output.amount * count;
+                            const outputPerMinActual = cyclesPerMin * spec.output.amount * (count - stalledCount);
+                            
+                            const outputResource = spec.output.resource;
+                            totalProductionRates[outputResource] = (totalProductionRates[outputResource] || 0) + outputPerMinActual;
+                            
+                            statusHtml += `
+                                <div class="prod-line">
+                                    <div>${spec.displayName} (${count}基) → ${RESOURCE_NAMES[outputResource]}</div>
+                                    <div class="prod-rate">${outputPerMinActual.toFixed(1)} / 分</div>
+                                    <div class="prod-stalled">${stalledCount > 0 ? `(${stalledCount} 停止)` : '稼働中'}</div>
+                                </div>
+                            `;
+                        } else if (type !== 'Warehouse' && count > 0) {
+                            // ユーティリティのレート表示
+                            let utilRate = '';
+                            if (type === 'AutoTransporter') utilRate = `${count * 3}資源/分`;
+                            if (type === 'TradePost') utilRate = `${count * 6}資源/分`;
+                            if (type === 'ContractOffice') utilRate = `${count * 3}資源/分`;
+                             statusHtml += `
+                                <div class="prod-line" style="background: rgba(255, 193, 7, 0.1);">
+                                    <div>${spec.displayName} (${count}基)</div>
+                                    <div class="prod-rate">${utilRate}</div>
+                                    <div class="prod-stalled">ユーティリティ</div>
+                                </div>
+                            `;
+                        }
+                    }
+
+                    // 建設ボタンの生成 (コストがある建物のみ)
+                    if (canBuy) {
+                        let buyCount = stats.buildingCountMultiplier;
+                        if (buyCount === 'max') {
+                            buyCount = getMaxPurchases(cost);
+                        }
+                        const totalCost = cost * buyCount;
+                        const displayCost = buyCount > 1 ? `(${totalCost.toFixed(0)}G)` : `${cost.toFixed(0)}G`;
+                        
+                        const cardDiv = document.createElement('div');
+                        cardDiv.className = 'building-card';
+                        
+                        // 建設ボタンの作成
+                        const buyButton = document.createElement('button');
+                        buyButton.className = 'build-button';
+                        buyButton.textContent = `建設 ${buyCount > 1 ? 'x' + buyCount : ''} (${displayCost})`;
+                        buyButton.onclick = () => buildBuilding(type);
+                        buyButton.disabled = stats.gold < totalCost || buyCount === 0;
+
+                        // 売却ボタンの作成 (要望: 9, 19)
+                        const sellButton = document.createElement('button');
+                        sellButton.className = 'sell-building-button';
+                        sellButton.textContent = `売却 (${count}基)`;
+                        sellButton.onclick = () => sellBuilding(type);
+                        sellButton.disabled = count === 0;
+
+                        // Mineアップグレードボタン
+                        let upgradeButton = '';
+                        if (type === 'Mine' && count > 0 && stats.buildings.AdvMine.length === 0) {
+                            const upgradeCost = 500 * count;
+                            upgradeButton = `
+                                <button class="upgrade-button" 
+                                        onclick="upgradeBuilding('Mine', 'AdvMine', ${upgradeCost})"
+                                        ${stats.gold < upgradeCost ? 'disabled' : ''}>
+                                    全${count}基UG (${upgradeCost}G)
+                                </button>
+                            `;
+                        }
+
+                        // カードの中身
+                        cardDiv.innerHTML = `
+                            <span style="font-size: 1.1em; font-weight: bold; color: #FFC107;">${spec.displayName}</span>
+                            ${isMineUpgrade ? `<span style="color: #2196F3; font-size: 0.8em; margin-left: 5px;">[UG済]</span>` : ''}
+                            <div class="building-info">所有数: <strong>${count}</strong>基</div>
+                            ${spec.input ? `<div class="building-info">材料: ${spec.input.map(i => `${RESOURCE_NAMES[i.resource]}${i.amount}`).join(', ')}</div>` : ''}
+                            ${spec.output ? `<div class="building-info">生産: ${RESOURCE_NAMES[spec.output.resource]}${spec.output.amount} / ${spec.time/10}秒</div>` : ''}
+                            <div class="building-actions">
+                                <div>${buyButton.outerHTML}</div>
+                                <div>${sellButton.outerHTML}</div>
+                            </div>
+                            ${upgradeButton}
+                        `;
+                        
+                        buildButtonsDiv.appendChild(cardDiv);
+                    }
+                }
+                
+                prodRateDetailsDiv.innerHTML = statusHtml || '稼働中の生産設備はありません。';
+
+            }
+            
+            // 5. プレステージパネルの更新
+            const totalAssets = stats.gold + stats.investment + stats.loan;
+            const prestigeBoostLevel = stats.upgrades.prestigeBoost;
+            const prestigeBoost = 1.0 + prestigeBoostLevel * 0.1; // 10% per level
+            
+            let prestigeGain = Math.floor(Math.log10(totalAssets / 100000) * 10) * 10 * prestigeBoost; 
+            prestigeGain = Math.floor(Math.max(0, prestigeGain));
+
+            document.getElementById('prestige-gain-display').textContent = prestigeGain;
+
+            const prestigeButton = document.getElementById('prestige-button');
+            const canPrestige = totalAssets >= 100000;
+            prestigeButton.disabled = !canPrestige;
+            prestigeButton.textContent = canPrestige ? `プレステージ実行 (${prestigeGain} ⭐獲得)` : '資金総額10万G達成で解放';
+            
+            // 6. 実績パネルの更新 (タブが開いていない限り実行しない)
+            if (document.getElementById('tab-achievement').style.display !== 'none') {
+                 generateAchievementList();
+                 generateRankingList();
+            }
+
+        }
+        
+        // --- 描画補助関数 ---
+
+        function generateInfoList() {
+            const infoList = document.getElementById('building-info-list');
+            infoList.innerHTML = '';
+            
+            for (const type in BUILDING_SPECS) {
+                const spec = BUILDING_SPECS[type];
+                
+                const card = document.createElement('div');
+                card.className = 'info-card';
+                card.style.borderLeft = `4px solid ${spec.output ? '#4CAF50' : '#2196F3'}`;
+                
+                let recipeHtml = '';
+                if (spec.input) {
+                    const inputs = spec.input.map(i => `<strong>${RESOURCE_NAMES[i.resource]} ${i.amount}</strong>`).join(' + ');
+                    recipeHtml = `<p><strong>材料:</strong> ${inputs}</p>`;
+                } else if (spec.output) {
+                    recipeHtml = `<p><strong>材料:</strong> 不要 (採掘)</p>`;
+                } else {
+                    recipeHtml = `<p><strong>効果:</strong> ${spec.description}</p>`;
+                }
+                
+                const outputRate = spec.output ? `${RESOURCE_NAMES[spec.output.resource]} ${spec.output.amount} / ${spec.time/10}秒` : 'なし';
+
+                card.innerHTML = `
+                    <h4 style="margin: 0; color: #4CAF50;">${spec.displayName} (${type})</h4>
+                    <p style="margin: 5px 0;">${spec.description}</p>
+                    ${recipeHtml}
+                    <p><strong>生産物:</strong> ${outputRate}</p>
+                    <p><strong>コスト:</strong> ${spec.cost}G</p>
+                `;
+                infoList.appendChild(card);
+            }
+        }
+        
+        function generateAchievementList() {
+            const container = document.getElementById('achievement-panel-container');
+            container.innerHTML = '';
+            
+            let achievedCount = 0;
+            const totalCount = Object.keys(ACHIEVEMENT_DEFINITIONS).length;
+
+            for (const key in ACHIEVEMENT_DEFINITIONS) {
+                const def = ACHIEVEMENT_DEFINITIONS[key];
+                const achieved = stats.achievements[key];
+                
+                if (achieved) achievedCount++;
+
+                const itemDiv = document.createElement('div');
+                itemDiv.className = `achievement-item ${achieved ? 'achieved' : 'locked'}`;
+                
+                itemDiv.innerHTML = `
+                    <div>
+                        <span style="font-size: 1.1em;">${achieved ? '✅' : '🔒'} ${def.name}</span>
+                        <p style="font-size: 0.85em; color: ${achieved ? 'black' : '#aaa'}; margin: 3px 0 0 0;">${def.description}</p>
+                    </div>
+                    <span class="ach-status" style="color: ${achieved ? 'black' : '#888'};">${achieved ? '達成済み' : '未達成'}</span>
+                `;
+                container.appendChild(itemDiv);
+            }
+            
+            document.getElementById('achieved-count').textContent = achievedCount;
+            document.getElementById('total-achievements').textContent = totalCount;
+        }
+
+        function generateRankingList() {
+            const rankingList = document.getElementById('ranking-list');
+            rankingList.innerHTML = '';
+            
+            const ranking = loadRanking();
+            if (ranking.length === 0) {
+                rankingList.innerHTML = '<li>ランキングデータがありません。プレステージ実行で登録されます。</li>';
+                return;
+            }
+            
+            ranking.forEach((entry, index) => {
+                const rank = index + 1;
+                const rankClass = rank <= 3 ? `rank-${rank}` : '';
+                
+                const listItem = document.createElement('li');
+                listItem.className = rankClass;
+                listItem.innerHTML = `
+                    <span>#${rank}</span>
+                    <span>${entry.score.toFixed(0)} ⭐</span>
+                    <span style="font-size: 0.8em; font-weight: normal; color: #aaa;">${entry.date}</span>
+                `;
+                rankingList.appendChild(listItem);
+            });
+        }
+
+
+        // 研究の実行
+        function researchUpgrade(key) {
+            const spec = GLOBAL_UPGRADES[key];
+            const currentLevel = stats.upgrades[key];
+            const cost = spec.getCost(currentLevel);
+            
+            const researchCostReduction = stats.upgrades.researchSpeed * 0.05; 
+            const finalCost = Math.ceil(cost * (1.0 - researchCostReduction));
+
+            if (stats.gold >= finalCost && currentLevel < spec.maxLevel) {
+                stats.gold -= finalCost;
+                stats.upgrades[key]++;
+                showMessage(`${spec.displayName}をLv.${stats.upgrades[key]}に研究しました！ (${spec.effect(stats.upgrades[key])})`, 'cyan');
+            } else {
+                showMessage('研究資金が不足しているか、最大レベルです。', 'red');
+            }
+            updateDisplay();
+        }
+
+        // 建物アップグレードの実行
+        function upgradeBuilding(oldType, newType, cost) {
+            if (stats.gold >= cost) {
+                stats.gold -= cost;
+                
+                stats.buildings[newType].push(...stats.buildings[oldType]);
+                stats.buildings[oldType] = [];
+
+                stats.buildings[newType].forEach(b => {
+                    b.type = newType;
+                    b.spec = BUILDING_SPECS[newType];
+                });
+
+                showMessage(`${BUILDING_SPECS[oldType].displayName} 全${stats.buildings[newType].length}基を ${BUILDING_SPECS[newType].displayName}にアップグレードしました！ (${cost.toFixed(0)}G消費)`, 'purple');
+            } else {
+                showMessage('アップグレード資金が足りません！', 'red');
+            }
+            updateDisplay();
+        }
+
+        // 建物の購入
+        function buildBuilding(type) {
+            const spec = BUILDING_SPECS[type];
+            const cost = spec.cost;
+            let count = stats.buildingCountMultiplier;
+
+            if (count === 'max') {
+                count = getMaxPurchases(cost);
+            }
+
+            const totalCost = cost * count;
+
+            if (count === 0) {
+                showMessage('購入できる建物の数がありません。', 'red');
+                return;
+            }
+
+            if (stats.gold >= totalCost) {
+                stats.gold -= totalCost;
+                for (let i = 0; i < count; i++) {
+                    stats.buildings[type].push(new Building(type));
+                }
+                
+                let message = `${spec.displayName}を${count}基建設しました！ (${totalCost.toFixed(0)}G消費)`;
+                if (count > 1) {
+                    message += ` (1基あたり${spec.cost.toFixed(0)}G)`;
+                }
+                showMessage(message, 'yellow');
+            } else {
+                showMessage('資金が足りません！', 'red');
+            }
+            updateDisplay();
+        }
+
+        function sellResource(resource) {
+            const amount = stats.resources[resource];
+            if (amount > 0) {
+                const price = getResourcePrice(resource); 
+                const revenue = amount * price;
+                stats.gold += revenue;
+                stats.resources[resource] = 0;
+                
+                // 市場安定化研究による売却ペナルティの軽減
+                const stabilityLevel = stats.upgrades.marketStability;
+                const reduction = 1.0 - (stabilityLevel * 0.1); 
+                
+                const marketImpact = Math.min(0.2, (amount / 1000) * 0.1) * reduction; 
+                stats.market.priceAdjustment[resource] -= marketImpact;
+
+                showMessage(`在庫の${amount.toFixed(0)}${RESOURCE_UNITS[resource]}の${RESOURCE_NAMES[resource]}を売却し、${revenue.toFixed(0)}Gを獲得しました。`, 'lime');
+            } else {
+                showMessage('売却できる資源がありません。', 'yellow');
+            }
+            updateDisplay();
+        }
+
+        function sellAllResources() {
+            let totalRevenue = 0;
+            let soldCount = 0;
+            
+            const stabilityLevel = stats.upgrades.marketStability;
+            const reduction = 1.0 - (stabilityLevel * 0.1); 
+
+            for (const resourceKey in stats.resources) {
+                const amount = stats.resources[resourceKey];
+                if (amount > 0) {
+                    const price = getResourcePrice(resourceKey);
+                    const revenue = amount * price;
+                    totalRevenue += revenue;
+                    stats.resources[resourceKey] = 0; 
+                    soldCount++;
+                    
+                    const marketImpact = Math.min(0.2, (amount / 1000) * 0.1) * reduction; 
+                    stats.market.priceAdjustment[resourceKey] -= marketImpact;
+                }
+            }
+
+            if (totalRevenue > 0) {
+                stats.gold += totalRevenue;
+                showMessage(`全${soldCount}種類の資源を売却し、合計${totalRevenue.toFixed(0)}Gを獲得しました。`, 'lime');
+            } else {
+                showMessage('売却できる資源が一つもありません。', 'yellow');
+            }
+            updateDisplay();
+        }
+        
+        // 投資アクション
+        function investMoney(amountStr) {
+            const amount = parseInt(amountStr);
+            if (isNaN(amount) || amount <= 0) {
+                showMessage('有効な投資額を入力してください。', 'red');
+                return;
+            }
+            if (stats.gold >= amount) {
+                stats.gold -= amount;
+                stats.investment += amount;
+                showMessage(`${amount.toFixed(0)}Gを市場に投資しました。市場変動による利益/損失が発生します。`, 'orange');
+            } else {
+                showMessage('投資資金が不足しています。', 'red');
+            }
+            updateDisplay();
+        }
+
+        function withdrawInvestment() {
+            if (stats.investment > 0) {
+                stats.gold += stats.investment;
+                const withdrawn = stats.investment.toFixed(0);
+                stats.investment = 0;
+                showMessage(`投資額${withdrawn}Gを全額回収しました。`, 'orange');
+            } else {
+                 showMessage('回収できる投資額はありません。', 'red');
+            }
+            updateDisplay();
+        }
+
+        // ローン借入
+        function takeLoan(amount) {
+            if (stats.loan > 1000000) {
+                 showMessage('借入額が大きすぎます。まずは返済してください。', 'red');
+                 return;
+            }
+            stats.gold += amount;
+            stats.loan += amount;
+            showMessage(`🏦 銀行から${amount.toFixed(0)}Gを借入しました。毎ティック利子が発生します！`, 'red', 'msg-loan');
+            updateDisplay();
+        }
+        
+        // ローン返済
+        function repayLoan() {
+            if (stats.loan <= 0) {
+                showMessage('借入額はありません。', 'yellow');
+                return;
+            }
+            if (stats.gold >= stats.loan) {
+                stats.gold -= stats.loan;
+                stats.loan = 0;
+                showMessage('🏦 ローンを全額返済しました！これで利子に悩まされません。', 'lime');
+            } else {
+                showMessage('資金が足りず、全額返済できません。', 'red');
+            }
+            updateDisplay();
+        }
+        
+        // プレステージリセット
+        function prestigeReset() {
+            const totalAssets = stats.gold + stats.investment + stats.loan;
+            const prestigeBoostLevel = stats.upgrades.prestigeBoost;
+            const prestigeBoost = 1.0 + prestigeBoostLevel * 0.1;
+            
+            let prestigeGain = Math.floor(Math.log10(totalAssets / 100000) * 10) * 10 * prestigeBoost; 
+            prestigeGain = Math.floor(Math.max(0, prestigeGain));
+
+            if (prestigeGain <= 0 || totalAssets < 100000) {
+                showMessage('プレステージを行うには、資金総額100,000G以上が必要です。', 'red');
+                return;
+            }
+            
+            if (confirm(`プレステージを実行しますか？全ての進捗がリセットされ、${prestigeGain} ⭐を獲得します。`)) {
+                
+                // ★ NEW: ランキングに登録 (要望: 10, 20)
+                saveRanking(stats.prestige_currency + prestigeGain); 
+                
+                const initialStats = { // 初期状態を定義
+                    gold: 1000, investment: 0, loan: 0, tick: 0, buildingCountMultiplier: 1, 
+                    resources: { ore: 0, copper_ore: 0, coal_ore: 0, alum_ore: 0, silicon_ore: 0, titan_ore: 0, iron: 0, copper_wire: 0, steel_copper: 0, alum: 0, wafer: 0, alloy: 0, },
+                    buildings: { Mine: [], CopperMine: [], CoalMine: [], AluminumMine: [], SiliconMine: [], TitaniumMine: [], Smelter: [], WireMill: [], SteelMill: [], AdvancedSmelter: [], AluminumSmelter: [], WaferFab: [], AlloyForge: [], AdvMine: [], AutoTransporter: [], Warehouse: [], TradePost: [], ContractOffice: [], },
+                    upgrades: { productionEfficiency: 0, warehouseCapacity: 0, marketStability: 0, prestigeBoost: 0, autoSellEfficiency: 0, loanInterestMitigation: 0, researchSpeed: 0, advancedMaterials: 0, }, // 全てリセット
+                    market: { priceAdjustment: { ore: 0, copper_ore: 0, coal_ore: 0, alum_ore: 0, silicon_ore: 0, titan_ore: 0, iron: 0, copper_wire: 0, steel_copper: 0, alum: 0, wafer: 0, alloy: 0, }, marketFluctuation: 1.0, },
+                    achievements: { first_build: false, max_1k_gold: false, max_10k_gold: false, max_100k_gold: false, iron_master: false, wafer_creator: false, all_mines: false, adv_mine_upgrade: false }
+                };
+                
+                // プレステージ通貨の加算
+                stats.prestige_currency += prestigeGain;
+                
+                // リセット
+                // stats.prestige_currency以外の部分をリセット
+                stats = {...stats, ...initialStats, prestige_currency: stats.prestige_currency}; 
+                
+                showMessage(`⭐ プレステージ完了！${prestigeGain} ⭐を獲得しました。ゲームが最初から再開されます。`, 'cyan');
+                switchTab('build');
+                updateDisplay(BASE_STOCK_LIMIT);
+            }
+        }
+
+        // メッセージ機能
+        function showMessage(text, color, className = '') {
+            const messageArea = document.getElementById('message-area');
+            messageArea.textContent = text;
+            messageArea.style.color = color;
+            messageArea.className = ''; 
+            if (className) {
+                messageArea.classList.add(className);
+            } else {
+                messageArea.style.backgroundColor = '#282828'; 
+                messageArea.style.color = color;
+            }
+        }
+
+
+        // --- メインループ ---
+        
+        switchTab('build'); 
+
+        function gameLoop() {
+            updateGame();
+            
+            setTimeout(gameLoop, TICK_RATE_MS); 
+        }
+
+        // --- 初期化 ---
+        updateDisplay(BASE_STOCK_LIMIT);
+        gameLoop(); 
+    </script>
 </body>
 </html>
